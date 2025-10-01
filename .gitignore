@@ -1,0 +1,108 @@
+# Environment Variables (contains secrets)
+.env
+.env.*
+!.env.template
+!env.template
+
+# Certificates (X.509 and SSL)
+certificates/
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Data folder (contains large files, databases, embeddings, vectors)
+data/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Session files
+*.session
+*.session-journal
+.session/
+
+# Telegram
+.telethon/
+
+# Node modules (frontend)
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+
+# UV lock file (optional, some prefer to commit it)
+# uv.lock
+
+# Test and temporary files
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Exports folder
+exports/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# MacOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Backup files
+*.backup
+*.bak
+*~
+
+# Large model files
+*.bin
+*.safetensors
+*.gguf
+

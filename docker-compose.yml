@@ -1,0 +1,177 @@
+services:
+  # Telegram CSV Downloader
+  telegram-downloader:
+    build: .
+    volumes:
+      - ./data:/app/data
+      - ./.session:/app/.session
+      - ./exports:/app/exports
+    environment:
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    command: python telegram_csv_downloader.py --all
+    profiles:
+      - telegram
+      - data-ingestion
+
+  # CSV Data Processor
+  csv-processor:
+    build: .
+    volumes:
+      - ./data:/app/data
+      - ./exports:/app/exports
+    environment:
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    command: python csv_data_processor.py
+    depends_on:
+      telegram-downloader:
+        condition: service_completed_successfully
+    profiles:
+      - telegram
+      - data-ingestion
+
+  # Interactive shell for manual operations
+  telegram-shell:
+    build: .
+    volumes:
+      - ./data:/app/data
+      - ./exports:/app/exports
+      - ./.session:/app/.session
+    environment:
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    command: /bin/bash
+    stdin_open: true
+    tty: true
+    profiles:
+      - telegram
+      - data-ingestion
+
+  # Discover available chats
+  telegram-discover:
+    build: .
+    volumes:
+      - ./.session:/app/.session
+    environment:
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    command: python telegram_csv_downloader.py --discover-only
+    profiles:
+      - telegram
+      - data-ingestion
+
+  # Download specific chats
+  telegram-specific:
+    build: .
+    volumes:
+      - ./data:/app/data
+      - ./.session:/app/.session
+      - ./exports:/app/exports
+    environment:
+      - PYTHONUNBUFFERED=1
+      - CHAT_IDS=${CHAT_IDS:-}
+    env_file:
+      - .env
+    command: sh -c 'python telegram_csv_downloader.py --chat-ids $${CHAT_IDS}'
+    profiles:
+      - specific
+
+  # Vector database (Qdrant)
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+    profiles:
+      - vectors
+      - web
+
+  # Vector processor
+  vector-processor:
+    build: .
+    volumes:
+      - ./data:/app/data
+      - ./exports:/app/exports
+    environment:
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    depends_on:
+      - qdrant
+    command: python simple_vector_processor.py --csv data/conversations/raw/*.csv
+    profiles:
+      - vectors
+
+  # Vector quality testing
+  vector-tester:
+    build: .
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    depends_on:
+      - qdrant
+    command: python vector_quality_tester.py
+    profiles:
+      - vectors
+
+  # MCP server for AI assistants (API only)
+  mcp-server:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    depends_on:
+      - qdrant
+    command: python visa_mcp_server.py
+    profiles:
+      - vectors
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Full-stack web application (React + FastAPI)
+  visa-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.fullstack
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./certificates:/app/certificates
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - OLLAMA_HOST=http://host.docker.internal:11434
+      - QDRANT_HOST=qdrant
+    depends_on:
+      - qdrant
+    command: python visa_mcp_server.py
+    profiles:
+      - web
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  qdrant_data:

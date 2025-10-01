@@ -1,0 +1,277 @@
+# Cursor AI Development Rules - Visa Community Platform
+
+## 🚫 STRICTLY PROHIBITED
+
+### **DO NOT CREATE** (Unless explicitly requested by user)
+
+- ❌ **Test files** (test\__.py, _\_test.py)
+- ❌ **README files** - ONLY edit existing README.md
+- ❌ **Documentation files** (\*.md) - ONLY use PROGRESS.md for tracking
+- ❌ **Example/demo files** - Use inline examples instead
+- ❌ **Duplicate functionality** - Check existing files first
+- ❌ **Architecture/design docs** - Add to PROGRESS.md
+- ❌ **Quick start guides** - Update README.md
+- ❌ **Change logs** - Update PROGRESS.md
+- ❌ **Build summaries** - Add to PROGRESS.md
+
+---
+
+## 📝 TWO FILES RULE
+
+**ONLY TWO DOCUMENTATION FILES ALLOWED:**
+
+1. **README.md** - User-facing documentation (how to use)
+2. **PROGRESS.md** - Internal progress tracking (what was built)
+
+**Never create:**
+
+- ARCHITECTURE.md
+- QUICK_START.md
+- USER_GUIDE.md
+- API_DOCS.md
+- CHANGELOG.md
+- CONTRIBUTING.md
+- DEPLOYMENT.md
+- Or ANY other .md file
+
+**Exception:** Only if user explicitly says "create a file called X.md"
+
+---
+
+## ✅ REQUIRED WORKFLOW
+
+### **When Making Changes:**
+
+1. **Edit existing code files** (Python, TypeScript, etc.)
+2. **Update PROGRESS.md** with what changed
+3. **Update README.md** if user-facing features changed
+4. **NEVER** create new .md files
+
+### **When User Asks for Documentation:**
+
+1. **Add to PROGRESS.md** (development history, technical details)
+2. **Update README.md** (user instructions, quick start)
+3. **Use code comments** (inline documentation)
+4. **NEVER** create separate doc files
+
+---
+
+## 🔧 CODE ORGANIZATION
+
+### **Core Files (Edit these):**
+
+**Backend:**
+
+- `visa_mcp_server.py` - Main FastAPI server
+- `community_chat.py` - WebSocket chat
+- `chat_synthesizer.py` - AI synthesis
+- `simple_vector_processor.py` - Vector search
+- `telegram_csv_downloader.py` - Data download
+- `data_cleanup.py` - Data preprocessing
+- `conversation_analyzer.py` - Topic analysis
+- `csv_data_processor.py` - CSV processing
+
+**Frontend:**
+
+- `frontend/src/App.tsx` - Main app
+- `frontend/src/CommunityChat.tsx` - Chat UI
+- `frontend/src/AIAssistant.tsx` - AI UI
+- `frontend/src/types/` - TypeScript types
+- `frontend/src/utils/` - Utilities
+- `frontend/src/components/` - React components
+
+**Configuration:**
+
+- `pyproject.toml` - Python dependencies (UV)
+- `requirements.txt` - Python dependencies (Docker)
+- `docker-compose.yml` - Service orchestration
+- `Dockerfile` - Backend Docker image
+- `Dockerfile.fullstack` - Full-stack Docker image
+- `.env` - Environment variables
+
+**Documentation (ONLY these):**
+
+- `README.md` - User documentation
+- `PROGRESS.md` - Progress tracking
+
+---
+
+## 🎯 DEVELOPMENT PRIORITIES
+
+1. **Functionality first** - Working code over documentation
+2. **Consolidation over creation** - Edit, don't create
+3. **Two-file documentation** - README.md + PROGRESS.md
+4. **Inline docs** - Use code comments
+5. **No file proliferation** - Minimum files, maximum value
+
+---
+
+## 💡 WHEN USER ASKS FOR FEATURES
+
+### **Step 1: Check Existing Files**
+
+- Can this be added to an existing module?
+- Is there similar functionality elsewhere?
+
+### **Step 2: Implement**
+
+- Edit existing file(s)
+- Add inline comments for complex logic
+- Follow existing code style
+
+### **Step 3: Document**
+
+- Update PROGRESS.md with what changed
+- Update README.md if user-facing
+- NEVER create new documentation files
+
+---
+
+## 📦 UV DEPENDENCY MANAGEMENT
+
+**ALWAYS use UV** for Python dependencies:
+
+```bash
+# Add dependencies
+uv add package_name
+
+# Remove dependencies
+uv remove package_name
+
+# Sync all
+uv sync
+
+# Run with UV environment
+uv run python script.py
+```
+
+**Update pyproject.toml** - UV manages this automatically  
+**Never use pip** - UV is faster and better  
+**Docker:** Use `uv pip install --system .` in Dockerfile
+
+---
+
+## 📊 PROGRESS TRACKING
+
+**All changes go in PROGRESS.md:**
+
+```markdown
+### Latest (Date)
+
+- ✅ Feature added
+- ✅ Bug fixed
+- ✅ Improvement made
+```
+
+**Structure of PROGRESS.md:**
+
+1. Project summary
+2. Completed features
+3. Architecture
+4. Technology stack
+5. Development history
+6. Issues resolved
+7. Future ideas
+8. Changes log (most recent at top)
+
+---
+
+## 🚀 EFFICIENCY RULES
+
+- **Batch updates** - Multiple changes in one response
+- **Existing patterns** - Follow established code style
+- **Minimal files** - Maximum 2 documentation files
+- **Core functionality** - Avoid feature creep
+- **Keep it working** - Don't break existing features
+- **No redundancy** - One source of truth
+
+---
+
+## 🎯 SUCCESS METRICS
+
+- **Fewer files** = Better organization
+- **More functionality per file** = Better efficiency
+- **Single source of truth** = README.md + PROGRESS.md only
+- **Working code** > Extensive documentation
+- **User accomplishes goals** quickly
+
+---
+
+## 📝 FILE CREATION CHECKLIST
+
+**Before creating ANY file, ask:**
+
+1. ❓ Does this functionality exist elsewhere?
+2. ❓ Can I add this to an existing file?
+3. ❓ Is this truly necessary or just nice-to-have?
+4. ❓ Did the user EXPLICITLY request this file?
+5. ❓ Is this a code file (Python, TypeScript, etc.) or documentation?
+
+**If documentation:**
+
+- ❌ NEVER create new .md files
+- ✅ Update PROGRESS.md instead
+- ✅ Or update README.md if user-facing
+
+**If code file:**
+
+- ✅ Only create if it's a new core module
+- ✅ Only if existing files would become >1000 lines
+- ✅ Only if it has a clearly different responsibility
+
+---
+
+## 🛡️ ENFORCEMENT
+
+**If AI Assistant creates unauthorized files:**
+
+- Delete them immediately
+- Consolidate content into PROGRESS.md or README.md
+- Never create: ARCHITECTURE.md, QUICK_START.md, USER_GUIDE.md, etc.
+
+**Only exception:**
+
+- User explicitly says: "Create a file called X.md"
+- Even then, suggest adding to existing docs first
+
+---
+
+## 🎨 DOCUMENTATION STYLE
+
+### **README.md:**
+
+- User-facing
+- Quick start
+- Usage examples
+- Common commands
+- Troubleshooting
+
+### **PROGRESS.md:**
+
+- Development history
+- Technical decisions
+- Architecture details
+- Issues resolved
+- Future ideas
+- Changes log
+
+### **Code Comments:**
+
+- Complex algorithms
+- Non-obvious logic
+- Function/class docstrings
+
+---
+
+## 🔄 UPDATE WORKFLOW
+
+**After every coding session:**
+
+1. ✅ Update PROGRESS.md "Latest" section
+2. ✅ Update README.md if user-facing changes
+3. ✅ Commit changes
+4. ❌ NEVER create new .md files
+
+---
+
+**Remember:** The goal is to build a maintainable platform, not create extensive documentation. Keep it simple: **2 docs max** (README.md + PROGRESS.md).

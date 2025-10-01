@@ -1,0 +1,66 @@
+# Multi-stage Dockerfile for React + FastAPI application
+
+# Stage 1: Build React Frontend
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /frontend
+
+# Copy frontend package files
+COPY frontend/package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy frontend source
+COPY frontend/ ./
+
+# Build frontend
+RUN npm run build
+
+# Stage 2: Python Backend with Frontend
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies and uv
+RUN apt-get update && apt-get install -y \
+    gcc \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Add uv to PATH
+ENV PATH="/root/.local/bin:$PATH"
+
+# Copy dependency files
+COPY pyproject.toml ./
+
+# Install Python dependencies
+RUN uv pip install --system .
+
+# Copy backend application files
+COPY *.py ./
+
+# Copy built frontend from Stage 1
+COPY --from=frontend-builder /frontend/dist ./frontend/dist
+
+# Create necessary directories
+RUN mkdir -p .session data/conversations/raw data/embeddings exports
+
+# Set permissions for data directories
+RUN chmod -R 755 data exports .session
+
+# Create a non-root user for security
+RUN useradd -m -u 1000 telegram && chown -R telegram:telegram /app
+USER telegram
+
+# Expose port for web access
+EXPOSE 8000
+
+# Default command - run full-stack server
+CMD ["python", "visa_mcp_server.py"]
+
+
+
+
+

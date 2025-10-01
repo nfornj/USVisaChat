@@ -1,0 +1,45 @@
+[project]
+name = "visa-vector-processor"
+version = "1.0.0"
+description = "Telegram visa conversation vector processing and search system"
+requires-python = ">=3.11"
+dependencies = [
+    # Core Telegram and data processing
+    "telethon>=1.36.0",
+    "python-dotenv>=1.0.0",
+    "aiofiles>=23.2.1",
+    "python-dateutil>=2.8.2",
+    # Data science core
+    "pandas>=2.1.0",
+    "numpy>=1.24.0",
+    # Vector processing
+    "sentence-transformers>=2.6.0",
+    "qdrant-client>=1.5.0,<2.0.0",
+    "torch>=2.0.0",
+    "transformers>=4.35.0",
+    "huggingface-hub>=0.20.0",
+    # MCP server dependencies
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "websockets>=12.0",
+    "httpx>=0.25.0",
+    # Optional API support
+    "openai>=1.0.0",
+    # Core utilities
+    "pydantic>=2.0.0,<3.0.0",
+    "tqdm>=4.65.0",
+    "pymongo>=4.15.1",
+    "dnspython>=2.8.0",
+    "cryptography>=46.0.1",
+    "pillow>=11.3.0",
+    "python-multipart>=0.0.20",
+    "requests>=2.32.5",
+    "beautifulsoup4>=4.14.2",
+]
+
+[tool.uv]
+# Prefer CPU-only PyTorch for Docker compatibility
+index-strategy = "unsafe-best-match"
+extra-index-url = [
+    "https://download.pytorch.org/whl/cpu"
+]
