@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from bson import ObjectId
-from mongodb_connection import mongodb_client
+from models.mongodb_connection import mongodb_client
 
 logger = logging.getLogger(__name__)
 

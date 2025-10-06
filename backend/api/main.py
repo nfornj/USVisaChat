@@ -19,12 +19,12 @@ import uuid
 from PIL import Image
 import io
 
-from simple_vector_processor import SimpleVectorProcessor
-from chat_synthesizer import ChatSynthesizer
-from enhanced_chat_synthesizer import EnhancedChatSynthesizer
-from community_chat import chat_manager
-from user_auth import auth_db_instance as auth_db
-from email_service import email_service
+from services.simple_vector_processor import SimpleVectorProcessor
+from services.chat_synthesizer import ChatSynthesizer
+from services.enhanced_chat_synthesizer import EnhancedChatSynthesizer
+from models.community_chat import chat_manager
+from models.user_auth import auth_db_instance as auth_db
+from services.email_service import email_service
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -100,12 +100,13 @@ app.add_middleware(
 )
 
 # Mount static files for frontend (if built)
-FRONTEND_BUILD_DIR = Path(__file__).parent / "frontend" / "dist"
+# Path is relative to /app (project root), not to backend/api/
+FRONTEND_BUILD_DIR = Path(__file__).parent.parent.parent / "frontend" / "dist"
 if FRONTEND_BUILD_DIR.exists():
     app.mount("/assets", StaticFiles(directory=str(FRONTEND_BUILD_DIR / "assets")), name="static")
 
 # Create and mount media directory for uploaded images
-MEDIA_DIR = Path(__file__).parent / "data" / "media" / "chat_images"
+MEDIA_DIR = Path(__file__).parent.parent.parent / "data" / "media" / "chat_images"
 MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/media", StaticFiles(directory=str(MEDIA_DIR.parent)), name="media")
 
@@ -121,11 +122,11 @@ async def startup_event():
     logger.info("🚀 Starting Visa MCP Server...")
     
     try:
+        # Create processor instance (will initialize lazily on first use)
         vector_processor = SimpleVectorProcessor()
-        await vector_processor.initialize()
-        logger.info("✅ Vector processor initialized successfully")
+        logger.info("✅ Vector processor created (will initialize on first request)")
     except Exception as e:
-        logger.error(f"❌ Failed to initialize vector processor: {e}")
+        logger.error(f"❌ Failed to create vector processor: {e}")
         raise
 
 @app.get("/health", response_model=HealthResponse)
@@ -705,7 +706,7 @@ def run_server(host: str = "0.0.0.0", port: int = 8000):
         logger.warning("⚠️  Frontend not built - only API available")
     
     uvicorn.run(
-        "visa_mcp_server:app",
+        "api.main:app",
         host=host,
         port=port,
         reload=False,

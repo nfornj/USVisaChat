@@ -9,7 +9,7 @@ import string
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Tuple
 import logging
-from mongodb_auth import auth_db
+from models.mongodb_auth import auth_db
 
 logger = logging.getLogger(__name__)
 

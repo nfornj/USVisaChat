@@ -30,8 +30,8 @@ class EnhancedChatSynthesizer:
         self.qdrant = QdrantClient(host=qdrant_host, port=6333)
         self.redbus_collection = "redbus2us_articles"
         
-        # Sentence encoder for semantic search
-        self.encoder = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+        # Lazy-load encoder (will be loaded on first use)
+        self._encoder = None
         
         # Ollama settings
         self.ollama_host = os.getenv('OLLAMA_HOST', 'http://localhost:11434')
@@ -41,6 +41,15 @@ class EnhancedChatSynthesizer:
         logger.info(f"   Qdrant: {qdrant_host}:6333")
         logger.info(f"   Using: {self.model_name} at {self.ollama_host}")
         logger.info(f"   RedBus2US collection: {self.redbus_collection}")
+    
+    @property
+    def encoder(self):
+        """Lazy-load the sentence transformer model"""
+        if self._encoder is None:
+            logger.info("📥 Loading SentenceTransformer model (first use)...")
+            self._encoder = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+            logger.info("✅ SentenceTransformer model loaded!")
+        return self._encoder
     
     async def synthesize_answer(self, query: str, use_redbus: bool = True) -> Dict:
         """
@@ -63,7 +72,7 @@ class EnhancedChatSynthesizer:
                 search_results = self.qdrant.search(
                     collection_name=self.redbus_collection,
                     query_vector=query_vector,
-                    limit=3
+                    limit=5  # Get top 5 most relevant articles
                 )
                 
                 if not search_results:
@@ -80,13 +89,15 @@ class EnhancedChatSynthesizer:
                 
                 for i, result in enumerate(search_results, 1):
                     article = result.payload
-                    context += f"{i}. {article['title']}\n"
-                    context += f"   {article['excerpt'][:250]}...\n\n"
+                    # Get first 500 chars of content for context
+                    content = article.get('content', '')[:500]
+                    context += f"Article {i}: {article.get('title', 'Untitled')}\n"
+                    context += f"{content}...\n\n"
                     
                     sources.append({
-                        "title": article['title'],
-                        "url": article['url'],
-                        "date": article['published_date'],
+                        "title": article.get('title', 'Untitled'),
+                        "url": article.get('url', ''),
+                        "date": article.get('published_date', ''),
                         "relevance_score": result.score
                     })
                 
@@ -121,15 +132,21 @@ class EnhancedChatSynthesizer:
     
     async def _generate_llm_answer(self, query: str, context: str) -> str:
         """Generate answer using local LLM"""
-        prompt = f"""Answer this H1B visa question using the information provided.
+        prompt = f"""You are an H1B visa expert. Answer the question using ONLY the information provided below. Do NOT make up or infer information not explicitly stated.
 
+AUTHORITATIVE SOURCES:
 {context}
 
-Question: {query}
+USER QUESTION: {query}
 
-Provide a clear, direct answer with specific details (fees, dates, timelines). Be concise and helpful.
+INSTRUCTIONS:
+1. Use ONLY the information from the articles above
+2. If the articles contain the answer, provide specific details (fees, dates, requirements)
+3. If the articles DO NOT contain the answer, say "The provided sources don't contain information about [topic]"
+4. Be concise and direct
+5. Do NOT add information from your general knowledge
 
-Answer:"""
+ANSWER:"""
         
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
@@ -140,8 +157,8 @@ Answer:"""
                         "prompt": prompt,
                         "stream": False,
                         "options": {
-                            "temperature": 0.2,
-                            "num_predict": 300,
+                            "temperature": 0.1,  # Very low for factual, grounded responses
+                            "num_predict": 400,  # Increased for more complete answers
                         }
                     }
                 )

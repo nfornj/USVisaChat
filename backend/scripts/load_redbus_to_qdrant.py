@@ -21,13 +21,15 @@ def load_redbus_articles_to_qdrant():
     logger.info("🚀 Loading RedBus2US articles into Qdrant...")
     
     # Load articles
-    with open('data/redbus2us_h1b_articles.json', 'r') as f:
+    with open('data/redbus2us_articles.json', 'r') as f:
         articles = json.load(f)
     
     logger.info(f"📚 Loaded {len(articles)} articles from JSON")
     
-    # Initialize Qdrant
-    client = QdrantClient(host='localhost', port=6333)
+    # Initialize Qdrant (use environment variable for Docker compatibility)
+    import os
+    qdrant_host = os.getenv('QDRANT_HOST', 'localhost')
+    client = QdrantClient(host=qdrant_host, port=6333)
     collection_name = "redbus2us_articles"
     
     # Initialize encoder
@@ -50,8 +52,9 @@ def load_redbus_articles_to_qdrant():
     # Prepare points
     points = []
     for article in articles:
-        # Create searchable text
-        text = f"{article['title']}\n\n{article['excerpt']}"
+        # Create searchable text from title and content
+        content_preview = article.get('content', '')[:500]  # First 500 chars
+        text = f"{article['title']}\n\n{content_preview}"
         
         # Generate embedding
         vector = encoder.encode(text).tolist()
@@ -63,12 +66,14 @@ def load_redbus_articles_to_qdrant():
             payload={
                 'title': article['title'],
                 'url': article['url'],
-                'excerpt': article['excerpt'],
-                'published_date': article['published_date'],
-                'categories': article['categories'],
+                'content': article.get('content', ''),
+                'published_date': article.get('published_date', ''),
+                'category': article.get('category', ''),
+                'tags': article.get('tags', []),
+                'key_points': article.get('key_points', []),
                 'source': 'RedBus2US',
-                'text': text,  # For retrieval
-                'scraped_at': article['scraped_at']
+                'text': text,  # For display in results
+                'scraped_at': article.get('scraped_at', '')
             }
         )
         points.append(point)
@@ -114,5 +119,7 @@ def load_redbus_articles_to_qdrant():
 
 if __name__ == "__main__":
     import os
-    os.chdir('/Users/neekrish/Documents/GitHub/MyAI/Visa')
+    # Work from project root (whether local or Docker)
+    if os.path.exists('/app'):
+        os.chdir('/app')  # Docker
     load_redbus_articles_to_qdrant()

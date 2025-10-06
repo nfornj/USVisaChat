@@ -8,7 +8,7 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Set
 from fastapi import WebSocket, WebSocketDisconnect
-from mongodb_chat import chat_db
+from models.mongodb_chat import chat_db
 
 logger = logging.getLogger(__name__)
 

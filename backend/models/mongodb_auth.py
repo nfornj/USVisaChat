@@ -9,7 +9,7 @@ import string
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional, Tuple
 from bson import ObjectId
-from mongodb_connection import mongodb_client
+from models.mongodb_connection import mongodb_client
 
 logger = logging.getLogger(__name__)
 

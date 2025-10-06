@@ -9,9 +9,9 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any
 
-from csv_data_processor import CSVDataProcessor
-from simple_vector_processor import SimpleVectorProcessor
-from vector_quality_tester import VectorQualityTester
+from scripts.csv_data_processor import CSVDataProcessor
+from services.simple_vector_processor import SimpleVectorProcessor
+# from vector_quality_tester import VectorQualityTester  # File doesn't exist
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ class VectorPipelineRunner:
     def __init__(self):
         self.csv_processor = CSVDataProcessor()
         self.vector_processor = SimpleVectorProcessor()
-        self.tester = VectorQualityTester(self.vector_processor)
+        # self.tester = VectorQualityTester(self.vector_processor)  # Disabled - file doesn't exist
     
     async def run_complete_pipeline(self, input_csv_files: list = None) -> Dict[str, Any]:
         """Run the complete pipeline: CSV → Processing → Vectors → Testing"""

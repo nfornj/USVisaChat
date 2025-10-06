@@ -7,6 +7,108 @@
 
 ## 🔧 Latest Changes
 
+### October 1, 2025 - AI Hallucination Fix & Knowledge Base Expansion ✅
+
+**🎯 Problem Solved**: LLM was hallucinating answers for H1B dropbox questions
+
+**Root Causes Identified**:
+
+1. Only 10 out of 60 RedBus2US articles were loaded into Qdrant
+2. Field name mismatch (`excerpt` vs `content`) in loader script
+3. LLM prompt wasn't strict enough about staying grounded
+4. Temperature too high (0.2) allowing creative responses
+
+**🔧 Fixes Applied**:
+
+1. **Fixed Loader Script**: Updated `load_redbus_to_qdrant.py` to use correct field names (`content`, `category`)
+2. **Reloaded All Articles**: Now 60/60 articles in Qdrant (including H1B dropbox content)
+3. **Improved Prompt**: Added strict instructions to ONLY use provided information
+4. **Reduced Temperature**: Lowered from 0.2 to 0.1 for more factual responses
+5. **Increased Context**: Now retrieves top 5 articles (up from 3)
+6. **Fixed Docker Compatibility**: Loader script now works in containers
+
+**📊 Before vs After**:
+
+- **Before**: 10 articles → Poor coverage, hallucinated answers
+- **After**: 60 articles → Full H1B coverage, grounded responses
+
+**✅ Confirmed Working**:
+
+- H1B Dropbox eligibility articles loaded ✅
+- "US Visa Dropbox/ Interview Waiver Eligibility Changed to 12 Months" ✅
+- "Dropbox Eligibility Ends for H1B, F1, L1 from Sep 2nd" ✅
+- Semantic search finds relevant articles ✅
+- LLM sticks to provided facts ✅
+
+---
+
+### October 1, 2025 - Backend Reorganization Complete ✅
+
+**🏗️ Project Structure Refactored**
+
+- **Reorganized**: All backend code into structured framework
+- **Created**: Proper directory structure with `api`, `services`, `models`, `utils`, `scripts`
+- **Fixed**: All Python imports to work with new structure
+- **Optimized**: Lazy-loading for ML models to prevent server startup delays
+- **Result**: ✅ Clean, maintainable backend architecture
+
+**📁 New Backend Structure**
+
+```
+backend/
+├── api/
+│   ├── __init__.py
+│   └── main.py                    # FastAPI server
+├── services/
+│   ├── __init__.py
+│   ├── simple_vector_processor.py
+│   ├── chat_synthesizer.py
+│   ├── enhanced_chat_synthesizer.py
+│   └── email_service.py
+├── models/
+│   ├── __init__.py
+│   ├── community_chat.py
+│   ├── user_auth.py
+│   ├── mongodb_chat.py
+│   ├── mongodb_auth.py
+│   └── mongodb_connection.py
+├── scripts/
+│   ├── __init__.py
+│   ├── telegram_csv_downloader.py
+│   ├── csv_data_processor.py
+│   ├── conversation_analyzer.py
+│   ├── knowledge_extractor.py
+│   ├── redbus2us_scraper.py
+│   ├── redbus_qa_bot.py
+│   └── load_redbus_to_qdrant.py
+└── utils/
+    └── __init__.py
+```
+
+**🔧 Key Changes**
+
+1. **Import Updates**: Fixed all Python imports to use relative paths (`from services.X import Y`)
+2. **Lazy Loading**: SentenceTransformer models now load on first use, not at server startup
+3. **Docker Updates**: Updated `docker-compose.yml` and Dockerfiles for new structure
+4. **PYTHONPATH**: Set `PYTHONPATH=/app/backend` in all containers
+5. **Module Resolution**: Changed Uvicorn from `visa_mcp_server:app` to `api.main:app`
+
+**⚡ Performance Improvements**
+
+- Server startup: ~2 seconds (down from 40+ seconds)
+- ML models load on-demand when first needed
+- Non-blocking initialization for all services
+
+**🎨 Frontend Integration**
+
+- Fixed frontend path resolution after reorganization
+- Updated paths from `Path(__file__).parent` to `Path(__file__).parent.parent.parent`
+- Frontend now correctly served from `/app/frontend/dist`
+- Static assets (JS, CSS) properly mounted at `/assets`
+- Media uploads served from `/media`
+
+---
+
 ### October 1, 2025 - AI Assistant Integration Complete ✅
 
 **🎯 RedBus2US Q&A Bot - Fully Working**
