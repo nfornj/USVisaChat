@@ -56,7 +56,11 @@ export default function ChatArea({
         ) : (
           <>
             {conversation.messages.map((message) => (
-              <MessageBubble key={message.id} message={message} />
+              <MessageBubble
+                key={message.id}
+                message={message}
+                isUser={message.role === "user"}
+              />
             ))}
             <div ref={messagesEndRef} />
           </>

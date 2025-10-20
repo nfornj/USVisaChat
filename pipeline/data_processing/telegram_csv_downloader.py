@@ -21,7 +21,10 @@ from telethon.tl.types import (
     MessageService, MessageEmpty
 )
 
-from telegram_read import load_config, is_bot_token, ensure_session_path
+try:
+    from .telegram_read import load_config, is_bot_token, ensure_session_path
+except ImportError:
+    from telegram_read import load_config, is_bot_token, ensure_session_path
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -415,11 +418,12 @@ async def main():
             print(f"\n📋 Discovered {len(chats)} chats:")
             print("-" * 60)
             for chat in chats[:20]:  # Show first 20
-                title = chat.get('title', 'No title')
-                chat_type = chat.get('type', 'unknown')
-                participants = chat.get('participant_count', 'N/A')
-                participants_str = f"{participants} members" if participants != 'N/A' else 'N/A'
-                print(f"{chat['id']:<12} | {title:<30} | {chat_type:<10} | {participants_str}")
+                chat_id = chat.get('id', 'N/A')
+                title = chat.get('title', 'No title') or 'No title'
+                chat_type = chat.get('type', 'unknown') or 'unknown'
+                participants = chat.get('participant_count', 0)
+                participants_str = f"{participants} members" if participants and participants > 0 else 'N/A'
+                print(f"{chat_id:<12} | {title:<30} | {chat_type:<10} | {participants_str}")
             
             if len(chats) > 20:
                 print(f"... and {len(chats) - 20} more chats")

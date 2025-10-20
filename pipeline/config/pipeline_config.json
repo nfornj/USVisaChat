@@ -1,0 +1,59 @@
+{
+  "scraping": {
+    "max_articles_per_run": 50,
+    "categories": [
+      "h1b-visa",
+      "f1-visa", 
+      "h4-visa",
+      "green-card",
+      "us-immigration",
+      "policy-updates",
+      "fees",
+      "documents", 
+      "interview",
+      "process-timeline",
+      "l1-visa",
+      "b1-b2-visa",
+      "administrative-processing",
+      "travel-restrictions"
+    ],
+    "lookback_days": 7,
+    "rate_limit_seconds": 2,
+    "retry_attempts": 3,
+    "timeout_seconds": 30
+  },
+  "processing": {
+    "enable_organization": true,
+    "enable_summarization": true,
+    "enable_vector_indexing": true,
+    "batch_size": 10,
+    "parallel_processing": false,
+    "skip_existing_summaries": true
+  },
+  "quality_control": {
+    "min_article_length": 100,
+    "max_article_length": 50000,
+    "required_fields": ["title", "content", "url"],
+    "skip_duplicates": true,
+    "content_quality_check": true
+  },
+  "notifications": {
+    "log_level": "INFO",
+    "email_alerts": false,
+    "slack_webhooks": false,
+    "discord_webhooks": false,
+    "save_detailed_logs": true
+  },
+  "storage": {
+    "backup_old_data": true,
+    "cleanup_temp_files": true,
+    "compress_old_logs": true,
+    "retention_days": 90
+  },
+  "monitoring": {
+    "track_performance": true,
+    "save_metrics": true,
+    "error_threshold": 10,
+    "success_rate_threshold": 0.8
+  }
+}

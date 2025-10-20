@@ -44,10 +44,11 @@ import {
 // Import both interfaces
 import AIAssistant from "./AIAssistant";
 import CommunityChat from "./CommunityChat";
+import TopicsHome from "./pages/TopicsHome";
 import { authAPI } from "./utils/api";
 import { createAppTheme } from "./theme";
 
-type TabType = "community" | "ai";
+type TabType = "topics" | "community" | "ai";
 type AuthStep = "email" | "code" | "authenticated";
 type AuthMode = "signup" | "login";
 
@@ -70,8 +71,12 @@ function App() {
 
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     const saved = localStorage.getItem("visa-active-tab");
-    return (saved as TabType) || "community";
+    return (saved as TabType) || "topics";
   });
+  const [selectedTopic, setSelectedTopic] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [onlineCount, setOnlineCount] = useState(0);
 
@@ -195,6 +200,9 @@ function App() {
         localStorage.setItem("visa-session-token", response.session_token);
         setUserProfile(response.user);
         setAuthStep("authenticated");
+        // Reset to topics tab on login
+        setActiveTab("topics");
+        localStorage.setItem("visa-active-tab", "topics");
         setSuccessMessage("Successfully logged in!");
       } else {
         setError(response.message || "Invalid verification code");
@@ -595,10 +603,22 @@ function App() {
               <Tab
                 label={
                   <Chip
+                    icon={<GroupsIcon />}
+                    label="Topics"
+                    color={activeTab === "topics" ? "primary" : "default"}
+                    sx={{ fontWeight: 500 }}
+                  />
+                }
+                value="topics"
+                sx={{ minHeight: 48, textTransform: "none" }}
+              />
+              <Tab
+                label={
+                  <Chip
                     icon={<ChatIcon />}
                     label={`Community Chat${
                       onlineCount > 0 ? ` (${onlineCount})` : ""
-                    }`}
+                    }${selectedTopic ? `: ${selectedTopic.name}` : ""}`}
                     color={activeTab === "community" ? "primary" : "default"}
                     sx={{ fontWeight: 500 }}
                   />
@@ -671,15 +691,22 @@ function App() {
         <Box sx={{ flexGrow: 1, overflow: "hidden" }}>
           {userProfile && (
             <>
-              {activeTab === "community" ? (
+              {activeTab === "topics" && (
+                <TopicsHome
+                  onTopicSelect={(topicId, topicName) => {
+                    setSelectedTopic({ id: topicId, name: topicName });
+                    setActiveTab("community");
+                  }}
+                />
+              )}
+              {activeTab === "community" && (
                 <CommunityChat
                   userEmail={userProfile.email}
                   displayName={userProfile.displayName}
                   onOnlineCountChange={setOnlineCount}
                 />
-              ) : (
-                <AIAssistant />
               )}
+              {activeTab === "ai" && <AIAssistant />}
             </>
           )}
         </Box>

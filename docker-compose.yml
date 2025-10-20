@@ -11,7 +11,7 @@ services:
       - PYTHONPATH=/app/backend
     env_file:
       - .env
-    command: python backend/scripts/telegram_csv_downloader.py --all
+    command: python pipeline/data_processing/telegram_csv_downloader.py --all
     profiles:
       - telegram
       - data-ingestion
@@ -27,7 +27,7 @@ services:
       - PYTHONPATH=/app/backend
     env_file:
       - .env
-    command: python backend/scripts/csv_data_processor.py
+    command: python pipeline/data_processing/csv_data_processor.py
     depends_on:
       telegram-downloader:
         condition: service_completed_successfully
@@ -63,7 +63,7 @@ services:
       - PYTHONPATH=/app/backend
     env_file:
       - .env
-    command: python backend/scripts/telegram_csv_downloader.py --discover-only
+    command: python pipeline/data_processing/telegram_csv_downloader.py --discover-only
     profiles:
       - telegram
       - data-ingestion
@@ -81,7 +81,7 @@ services:
       - CHAT_IDS=${CHAT_IDS:-}
     env_file:
       - .env
-    command: sh -c 'python backend/scripts/telegram_csv_downloader.py --chat-ids $${CHAT_IDS}'
+    command: sh -c 'python pipeline/data_processing/telegram_csv_downloader.py --chat-ids $${CHAT_IDS}'
     profiles:
       - specific
 
@@ -96,6 +96,21 @@ services:
     profiles:
       - vectors
       - web
+      - production
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2.0"
+        reservations:
+          memory: 2G
+          cpus: "1.0"
 
   # Vector processor
   vector-processor:
@@ -110,6 +125,7 @@ services:
       - .env
     depends_on:
       - qdrant
+      - mongodb
     command: python backend/services/simple_vector_processor.py --csv data/conversations/raw/*.csv
     profiles:
       - vectors
@@ -118,7 +134,7 @@ services:
   mcp-server:
     build: .
     ports:
-      - "8000:8000"
+      - "8001:8000"
     volumes:
       - ./data:/app/data
     environment:
@@ -128,6 +144,7 @@ services:
       - .env
     depends_on:
       - qdrant
+      - mongodb
     command: python backend/api/main.py
     profiles:
       - vectors
@@ -137,13 +154,13 @@ services:
       timeout: 10s
       retries: 3
 
-  # Full-stack web application (React + FastAPI)
+  # Full-stack web application (React + FastAPI) - Local Development
   visa-web:
     build:
       context: .
       dockerfile: Dockerfile.fullstack
     ports:
-      - "8000:8000"
+      - "8001:8000"
     volumes:
       - ./data:/app/data
       - ./certificates:/app/certificates
@@ -152,18 +169,148 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app/backend
+      - LLM_PROVIDER=ollama
+      - LLM_MODEL=llama3.2:3b
       - OLLAMA_HOST=http://host.docker.internal:11434
       - QDRANT_HOST=qdrant
+      - MONGODB_URI=mongodb+srv://usvisacommunity.9mewkyh.mongodb.net/?authSource=%24external&authMechanism=MONGODB-X509&retryWrites=true&w=majority&appName=usvisacommunity
+      - MONGODB_DATABASE=visa_community
+      - MONGODB_TLS_ENABLED=true
+      - MONGODB_TLS_CERT_FILE=/app/certificates/mongodb-cert.pem
+      - MONGODB_AUTH_MECHANISM=MONGODB-X509
+      - EMAIL_MODE=mock
     depends_on:
       - qdrant
     command: python backend/api/main.py
     profiles:
       - web
+      - development
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
 
+  # Full-stack web application (React + FastAPI) - Production with Groq
+  visa-web-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile.fullstack
+    ports:
+      - "8002:8000"
+    volumes:
+      - ./data:/app/data
+      - ./certificates:/app/certificates
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app/backend
+      - LLM_PROVIDER=groq
+      - LLM_MODEL=llama3.2:3b
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - QDRANT_HOST=qdrant
+      - MONGODB_URI=mongodb+srv://usvisacommunity.9mewkyh.mongodb.net/?authSource=%24external&authMechanism=MONGODB-X509&retryWrites=true&w=majority&appName=usvisacommunity
+      - MONGODB_DATABASE=visa_community
+      - MONGODB_TLS_ENABLED=true
+      - MONGODB_TLS_CERT_FILE=/app/certificates/mongodb-cert.pem
+      - MONGODB_AUTH_MECHANISM=MONGODB-X509
+      - EMAIL_MODE=mock
+    depends_on:
+      - qdrant
+    command: python backend/api/main.py
+    profiles:
+      - web
+      - production
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Production deployment - Vector DB + Frontend + Groq API
+  visa-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile.fullstack
+    ports:
+      - "8003:8000"
+    volumes:
+      - ./data:/app/data
+      - ./certificates:/app/certificates
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app/backend
+      - LLM_PROVIDER=groq
+      - LLM_MODEL=llama3.2:3b
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - QDRANT_HOST=qdrant
+      - MONGODB_URI=mongodb+srv://usvisacommunity.9mewkyh.mongodb.net/?authSource=%24external&authMechanism=MONGODB-X509&retryWrites=true&w=majority&appName=usvisacommunity
+      - MONGODB_DATABASE=visa_community
+      - MONGODB_TLS_ENABLED=true
+      - MONGODB_TLS_CERT_FILE=/app/certificates/mongodb-cert.pem
+      - MONGODB_AUTH_MECHANISM=MONGODB-X509
+      - EMAIL_MODE=${EMAIL_MODE}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL}
+      - SMTP_FROM_NAME=${SMTP_FROM_NAME}
+    depends_on:
+      - qdrant
+    command: python backend/api/main.py
+    profiles:
+      - production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "1.0"
+        reservations:
+          memory: 1G
+          cpus: "0.5"
+
+  # MongoDB for user authentication and chat history
+  # COMMENTED OUT: Using MongoDB Atlas instead of local MongoDB
+  # mongodb:
+  #   image: mongo:latest
+  #   ports:
+  #     - "27017:27017"
+  #   volumes:
+  #     - mongodb_data:/data/db
+  #     - ./backend/scripts/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+  #   environment:
+  #     - MONGO_INITDB_DATABASE=visa_community
+  #     - MONGO_INITDB_ROOT_USERNAME=visa_admin
+  #     - MONGO_INITDB_ROOT_PASSWORD=visa_password
+  #   healthcheck:
+  #     test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 30s
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 1G
+  #         cpus: "1.0"
+  #       reservations:
+  #         memory: 512M
+  #         cpus: "0.5"
+  #   profiles:
+  #     - web
+  #     - production
+
 volumes:
   qdrant_data:
+  mongodb_data:

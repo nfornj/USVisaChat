@@ -132,19 +132,24 @@ async def startup_event():
 @app.get("/health", response_model=HealthResponse)
 async def detailed_health():
     """Detailed health check with database status"""
-    global vector_processor
-    
-    if not vector_processor or not vector_processor.is_initialized:
-        raise HTTPException(status_code=503, detail="Vector processor not initialized")
-    
     try:
-        stats = await vector_processor.get_collection_stats()
-        if 'error' in stats:
-            raise HTTPException(status_code=503, detail=f"Database error: {stats['error']}")
+        # Check Qdrant connection
+        qdrant = QdrantClient(host="qdrant", port=6333)
+        collections = qdrant.get_collections()
+        
+        # Check if our collection exists
+        redbus_collection_exists = any(c.name == "redbus2us_articles" for c in collections.collections)
+        
+        if not redbus_collection_exists:
+            raise HTTPException(status_code=503, detail="RedBus2US articles collection not found")
+        
+        # Get collection info
+        collection_info = qdrant.get_collection("redbus2us_articles")
+        points_count = collection_info.points_count
         
         return HealthResponse(
             status="healthy",
-            message=f"Connected to Qdrant with {stats.get('total_vectors', 0)} visa conversations",
+            message=f"Connected to Qdrant with {points_count} RedBus2US article vectors",
             version="1.0.0"
         )
     except Exception as e:

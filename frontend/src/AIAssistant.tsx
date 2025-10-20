@@ -15,6 +15,7 @@ export default function AIAssistant() {
       id: `msg-${Date.now()}`,
       role: "user",
       content,
+      text: content,
       timestamp: new Date(),
     };
 
@@ -25,6 +26,7 @@ export default function AIAssistant() {
       id: `msg-${Date.now()}-assistant`,
       role: "assistant",
       content: "",
+      text: "",
       timestamp: new Date(),
       isStreaming: true,
     };

@@ -1,0 +1,394 @@
+import React, { useState } from "react";
+import { motion } from "framer-motion";
+import {
+  TrendingUp,
+  Users,
+  MessageCircle,
+  ArrowRight,
+  Zap,
+  Sparkles,
+} from "lucide-react";
+import { useTheme } from "@mui/material/styles";
+import { Box } from "@mui/material";
+
+interface Topic {
+  id: string;
+  name: string;
+  category: string;
+  activeUsers: number;
+  messageCount: number;
+  lastActive: string;
+  trend: "hot" | "rising" | "steady";
+  gradient: string;
+  icon: string;
+}
+
+interface TopicsHomeProps {
+  onTopicSelect: (topicId: string, topicName: string) => void;
+}
+
+const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+
+  const [topics] = useState<Topic[]>([
+    {
+      id: "h1b-stamping",
+      name: "H1B Visa Stamping",
+      category: "Work Visa",
+      activeUsers: 156,
+      messageCount: 3420,
+      lastActive: "2m ago",
+      trend: "hot",
+      gradient: "from-orange-400 to-red-500",
+      icon: "🔥",
+    },
+    {
+      id: "h1b-fee-hike",
+      name: "H1B Fee Hike 2025",
+      category: "Policy Update",
+      activeUsers: 89,
+      messageCount: 1245,
+      lastActive: "5m ago",
+      trend: "hot",
+      gradient: "from-purple-400 to-pink-500",
+      icon: "⚡",
+    },
+    {
+      id: "dropbox-eligibility",
+      name: "Dropbox Eligibility",
+      category: "Process",
+      activeUsers: 67,
+      messageCount: 892,
+      lastActive: "8m ago",
+      trend: "rising",
+      gradient: "from-blue-400 to-cyan-500",
+      icon: "📋",
+    },
+    {
+      id: "f1-visa",
+      name: "F1 Student Visa",
+      category: "Student Visa",
+      activeUsers: 54,
+      messageCount: 678,
+      lastActive: "12m ago",
+      trend: "steady",
+      gradient: "from-green-400 to-emerald-500",
+      icon: "🎓",
+    },
+    {
+      id: "administrative-processing",
+      name: "221g Admin Processing",
+      category: "Issues",
+      activeUsers: 43,
+      messageCount: 567,
+      lastActive: "15m ago",
+      trend: "rising",
+      gradient: "from-yellow-400 to-orange-500",
+      icon: "⏳",
+    },
+    {
+      id: "interview-experience",
+      name: "Interview Experiences",
+      category: "General",
+      activeUsers: 38,
+      messageCount: 489,
+      lastActive: "18m ago",
+      trend: "steady",
+      gradient: "from-indigo-400 to-purple-500",
+      icon: "💬",
+    },
+    {
+      id: "visa-appointment",
+      name: "Visa Appointments",
+      category: "Scheduling",
+      activeUsers: 32,
+      messageCount: 401,
+      lastActive: "22m ago",
+      trend: "steady",
+      gradient: "from-pink-400 to-rose-500",
+      icon: "📅",
+    },
+    {
+      id: "documents-checklist",
+      name: "Documents Checklist",
+      category: "Preparation",
+      activeUsers: 28,
+      messageCount: 356,
+      lastActive: "25m ago",
+      trend: "steady",
+      gradient: "from-cyan-400 to-blue-500",
+      icon: "✅",
+    },
+  ]);
+
+  const [hoveredTopic, setHoveredTopic] = useState<string | null>(null);
+
+  const getTrendBadge = (trend: string) => {
+    switch (trend) {
+      case "hot":
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-semibold">
+            <Zap className="w-3 h-3" />
+            Hot
+          </span>
+        );
+      case "rising":
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-xs font-semibold">
+            <TrendingUp className="w-3 h-3" />
+            Rising
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-semibold">
+            <MessageCircle className="w-3 h-3" />
+            Active
+          </span>
+        );
+    }
+  };
+
+  return (
+    <Box
+      sx={{
+        minHeight: "100vh",
+        background: isDark
+          ? "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)"
+          : "linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)",
+        py: 6,
+        px: 3,
+      }}
+    >
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="text-center mb-8"
+        >
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white mb-4">
+            <Sparkles className="w-4 h-4" />
+            <span className="text-sm font-semibold">Trending Discussions</span>
+          </div>
+          <h1
+            className={`text-5xl font-bold mb-3 ${
+              isDark ? "text-white" : "text-gray-900"
+            }`}
+          >
+            Popular Topics
+          </h1>
+          <p
+            className={`text-lg ${isDark ? "text-gray-300" : "text-gray-600"}`}
+          >
+            Join thousands of users discussing visa-related topics
+          </p>
+        </motion.div>
+
+        {/* Stats Bar */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="flex justify-center gap-6 mb-12"
+        >
+          <div
+            className={`px-6 py-4 rounded-2xl ${
+              isDark
+                ? "bg-white/10 backdrop-blur-lg border border-white/20"
+                : "bg-white/80 backdrop-blur-lg border border-gray-200 shadow-lg"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div
+                className={`p-2 rounded-lg ${
+                  isDark ? "bg-blue-500/20" : "bg-blue-100"
+                }`}
+              >
+                <Users
+                  className={`w-5 h-5 ${
+                    isDark ? "text-blue-400" : "text-blue-600"
+                  }`}
+                />
+              </div>
+              <div>
+                <p
+                  className={`text-2xl font-bold ${
+                    isDark ? "text-white" : "text-gray-900"
+                  }`}
+                >
+                  {topics.reduce((sum, t) => sum + t.activeUsers, 0)}
+                </p>
+                <p
+                  className={`text-sm ${
+                    isDark ? "text-gray-300" : "text-gray-600"
+                  }`}
+                >
+                  Active Users
+                </p>
+              </div>
+            </div>
+          </div>
+          <div
+            className={`px-6 py-4 rounded-2xl ${
+              isDark
+                ? "bg-white/10 backdrop-blur-lg border border-white/20"
+                : "bg-white/80 backdrop-blur-lg border border-gray-200 shadow-lg"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div
+                className={`p-2 rounded-lg ${
+                  isDark ? "bg-purple-500/20" : "bg-purple-100"
+                }`}
+              >
+                <MessageCircle
+                  className={`w-5 h-5 ${
+                    isDark ? "text-purple-400" : "text-purple-600"
+                  }`}
+                />
+              </div>
+              <div>
+                <p
+                  className={`text-2xl font-bold ${
+                    isDark ? "text-white" : "text-gray-900"
+                  }`}
+                >
+                  {topics.length}
+                </p>
+                <p
+                  className={`text-sm ${
+                    isDark ? "text-gray-300" : "text-gray-600"
+                  }`}
+                >
+                  Active Topics
+                </p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Topics Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {topics.map((topic, index) => (
+            <motion.div
+              key={topic.id}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{
+                delay: index * 0.1,
+                duration: 0.3,
+              }}
+              whileHover={{ scale: 1.05, y: -5 }}
+              onClick={() => onTopicSelect(topic.id, topic.name)}
+              onMouseEnter={() => setHoveredTopic(topic.id)}
+              onMouseLeave={() => setHoveredTopic(null)}
+              className={`cursor-pointer rounded-2xl p-6 transition-all duration-300 ${
+                isDark
+                  ? "bg-white/10 backdrop-blur-lg border border-white/20 hover:bg-white/20"
+                  : "bg-white border border-gray-200 hover:shadow-2xl shadow-lg"
+              }`}
+            >
+              {/* Topic Header */}
+              <div className="flex items-start justify-between mb-4">
+                <div
+                  className={`text-4xl p-3 rounded-xl ${
+                    isDark ? "bg-white/10" : "bg-gray-100"
+                  }`}
+                >
+                  {topic.icon}
+                </div>
+                {getTrendBadge(topic.trend)}
+              </div>
+
+              {/* Topic Title */}
+              <h3
+                className={`text-lg font-bold mb-2 ${
+                  isDark ? "text-white" : "text-gray-900"
+                }`}
+              >
+                {topic.name}
+              </h3>
+
+              {/* Category */}
+              <p
+                className={`text-sm mb-4 ${
+                  isDark ? "text-gray-400" : "text-gray-600"
+                }`}
+              >
+                {topic.category}
+              </p>
+
+              {/* Stats */}
+              <div className="space-y-2 mb-4">
+                <div className="flex items-center justify-between">
+                  <span
+                    className={`text-sm flex items-center gap-2 ${
+                      isDark ? "text-gray-300" : "text-gray-600"
+                    }`}
+                  >
+                    <Users className="w-4 h-4" />
+                    {topic.activeUsers} online
+                  </span>
+                  <span
+                    className={`text-sm flex items-center gap-2 ${
+                      isDark ? "text-gray-300" : "text-gray-600"
+                    }`}
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    {topic.messageCount}
+                  </span>
+                </div>
+                <p
+                  className={`text-xs ${
+                    isDark ? "text-gray-400" : "text-gray-500"
+                  }`}
+                >
+                  Active {topic.lastActive}
+                </p>
+              </div>
+
+              {/* Action Button */}
+              <div
+                className={`flex items-center justify-between pt-4 border-t ${
+                  isDark ? "border-white/10" : "border-gray-200"
+                }`}
+              >
+                <span
+                  className={`text-sm font-semibold ${
+                    isDark ? "text-blue-400" : "text-blue-600"
+                  }`}
+                >
+                  Join Discussion
+                </span>
+                <ArrowRight
+                  className={`w-5 h-5 transition-transform ${
+                    hoveredTopic === topic.id ? "translate-x-1" : ""
+                  } ${isDark ? "text-blue-400" : "text-blue-600"}`}
+                />
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Footer Tip */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1 }}
+          className="text-center mt-12"
+        >
+          <p
+            className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}
+          >
+            💡 Click on any topic card to join the conversation
+          </p>
+        </motion.div>
+      </div>
+    </Box>
+  );
+};
+
+export default TopicsHome;

@@ -2,6 +2,7 @@ export interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  text: string;
   timestamp: Date;
   sources?: any[];  // Can be SearchResult[] or RedBus2US sources
   isStreaming?: boolean;

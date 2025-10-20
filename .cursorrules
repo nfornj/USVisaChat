@@ -16,12 +16,13 @@
 
 ---
 
-## 📝 TWO FILES RULE
+## 📝 THREE FILES RULE
 
-**ONLY TWO DOCUMENTATION FILES ALLOWED:**
+**ONLY THREE DOCUMENTATION FILES ALLOWED:**
 
 1. **README.md** - User-facing documentation (how to use)
 2. **PROGRESS.md** - Internal progress tracking (what was built)
+3. **PROJECT_PROFILE.md** - Complete project overview and technical details
 
 **Never create:**
 
@@ -45,14 +46,16 @@
 1. **Edit existing code files** (Python, TypeScript, etc.)
 2. **Update PROGRESS.md** with what changed
 3. **Update README.md** if user-facing features changed
-4. **NEVER** create new .md files
+4. **Update PROJECT_PROFILE.md** with technical details and architecture changes
+5. **NEVER** create new .md files
 
 ### **When User Asks for Documentation:**
 
 1. **Add to PROGRESS.md** (development history, technical details)
 2. **Update README.md** (user instructions, quick start)
-3. **Use code comments** (inline documentation)
-4. **NEVER** create separate doc files
+3. **Update PROJECT_PROFILE.md** (technical architecture, system details)
+4. **Use code comments** (inline documentation)
+5. **NEVER** create separate doc files
 
 ---
 
@@ -93,6 +96,7 @@
 
 - `README.md` - User documentation
 - `PROGRESS.md` - Progress tracking
+- `PROJECT_PROFILE.md` - Complete project overview
 
 ---
 
@@ -100,7 +104,7 @@
 
 1. **Functionality first** - Working code over documentation
 2. **Consolidation over creation** - Edit, don't create
-3. **Two-file documentation** - README.md + PROGRESS.md
+3. **Three-file documentation** - README.md + PROGRESS.md + PROJECT_PROFILE.md
 4. **Inline docs** - Use code comments
 5. **No file proliferation** - Minimum files, maximum value
 
@@ -123,6 +127,7 @@
 
 - Update PROGRESS.md with what changed
 - Update README.md if user-facing
+- Update PROJECT_PROFILE.md with technical details
 - NEVER create new documentation files
 
 ---
@@ -180,7 +185,7 @@ uv run python script.py
 
 - **Batch updates** - Multiple changes in one response
 - **Existing patterns** - Follow established code style
-- **Minimal files** - Maximum 2 documentation files
+- **Minimal files** - Maximum 3 documentation files
 - **Core functionality** - Avoid feature creep
 - **Keep it working** - Don't break existing features
 - **No redundancy** - One source of truth
@@ -191,7 +196,7 @@ uv run python script.py
 
 - **Fewer files** = Better organization
 - **More functionality per file** = Better efficiency
-- **Single source of truth** = README.md + PROGRESS.md only
+- **Single source of truth** = README.md + PROGRESS.md + PROJECT_PROFILE.md only
 - **Working code** > Extensive documentation
 - **User accomplishes goals** quickly
 
@@ -212,6 +217,7 @@ uv run python script.py
 - ❌ NEVER create new .md files
 - ✅ Update PROGRESS.md instead
 - ✅ Or update README.md if user-facing
+- ✅ Or update PROJECT_PROFILE.md if technical/architectural
 
 **If code file:**
 
@@ -226,7 +232,7 @@ uv run python script.py
 **If AI Assistant creates unauthorized files:**
 
 - Delete them immediately
-- Consolidate content into PROGRESS.md or README.md
+- Consolidate content into PROGRESS.md, README.md, or PROJECT_PROFILE.md
 - Never create: ARCHITECTURE.md, QUICK_START.md, USER_GUIDE.md, etc.
 
 **Only exception:**
@@ -250,10 +256,18 @@ uv run python script.py
 
 - Development history
 - Technical decisions
-- Architecture details
 - Issues resolved
 - Future ideas
 - Changes log
+
+### **PROJECT_PROFILE.md:**
+
+- Complete project overview
+- Technical architecture
+- System specifications
+- Performance metrics
+- Deployment details
+- Current status
 
 ### **Code Comments:**
 
@@ -269,9 +283,47 @@ uv run python script.py
 
 1. ✅ Update PROGRESS.md "Latest" section
 2. ✅ Update README.md if user-facing changes
-3. ✅ Commit changes
-4. ❌ NEVER create new .md files
+3. ✅ Update PROJECT_PROFILE.md if technical/architectural changes
+4. ✅ Commit changes
+5. ❌ NEVER create new .md files
 
 ---
 
-**Remember:** The goal is to build a maintainable platform, not create extensive documentation. Keep it simple: **2 docs max** (README.md + PROGRESS.md).
+**Remember:** The goal is to build a maintainable platform, not create extensive documentation. Keep it simple: **3 docs max** (README.md + PROGRESS.md + PROJECT_PROFILE.md).
+
+---
+
+## 📋 PROJECT_PROFILE.md UPDATE RULES
+
+**MANDATORY: Update PROJECT_PROFILE.md with every significant change:**
+
+### **When to Update PROJECT_PROFILE.md:**
+
+- ✅ **Architecture changes** - New services, components, or integrations
+- ✅ **Technology stack updates** - New frameworks, libraries, or tools
+- ✅ **Performance changes** - Speed improvements, resource optimizations
+- ✅ **Deployment changes** - New Docker profiles, environment variables
+- ✅ **Feature additions** - New functionality or capabilities
+- ✅ **Security updates** - Authentication, encryption, or security changes
+- ✅ **Data changes** - Database schema, vector collections, or data sources
+
+### **What to Update in PROJECT_PROFILE.md:**
+
+- **Technical Architecture** section
+- **Performance Metrics** section
+- **Recent Updates** section
+- **Project Status** section
+- **Deployment Profiles** section
+- **API Endpoints** section (if changed)
+
+### **Update Format:**
+
+```markdown
+### December 19, 2024
+
+- ✅ **Feature Name**: Brief description of what was added/changed
+- ✅ **Technical Details**: Specific technical implementation details
+- ✅ **Impact**: How this affects the system or users
+```
+
+**This ensures PROJECT_PROFILE.md remains the single source of truth for the complete project state.**
