@@ -641,43 +641,106 @@ async def mcp_capabilities():
         }
     }
 
-# Community Chat WebSocket endpoint
-@app.websocket("/ws/chat/{user_email}/{display_name}")
-async def websocket_chat_endpoint(websocket: WebSocket, user_email: str, display_name: str):
-    """WebSocket endpoint for real-time community chat"""
-    # Use the actual display name from the user's profile, not auto-generated
-    await chat_manager.connect(websocket, user_email, display_name)
+# Community Chat WebSocket endpoint - Using simple path to avoid routing issues
+@app.websocket("/ws/chat")
+async def websocket_chat_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for real-time community chat with room isolation"""
+    # MUST accept connection FIRST before doing anything
+    await websocket.accept()
+    
+    # Now get parameters from query string
+    query_params = dict(websocket.query_params)
+    user_email = query_params.get("user_email", "")
+    display_name = query_params.get("display_name", "")
+    room_id = query_params.get("room_id", "general")
+    
+    logger.info(f"🔌 WebSocket connected: email={user_email}, name={display_name}, room={room_id}")
+    
+    if not user_email or not display_name:
+        logger.error("❌ Missing user_email or display_name")
+        await websocket.close(code=1008, reason="Missing required parameters")
+        return
+    
+    try:
+        # Register with chat manager (don't call accept again inside!)
+        # Store connection in our room structure
+        if room_id not in chat_manager.rooms:
+            chat_manager.rooms[room_id] = {}
+        
+        chat_manager.rooms[room_id][user_email] = {
+            'ws': websocket,
+            'display_name': display_name
+        }
+        
+        # Send history
+        history = chat_manager.db.get_recent_messages(limit=50, room_id=room_id)
+        await websocket.send_json({
+            'type': 'history',
+            'messages': history,
+            'room_id': room_id
+        })
+        
+        # Notify others
+        await chat_manager.broadcast_system_message(f"{display_name} joined the chat", room_id=room_id, exclude=user_email)
+        await chat_manager.broadcast_user_list(room_id)
+        
+        logger.info(f"✅ {user_email} ({display_name}) connected to room '{room_id}'. Room users: {len(chat_manager.rooms[room_id])}")
+        
+    except Exception as e:
+        logger.error(f"❌ WebSocket setup failed: {e}")
+        await websocket.close(code=1011, reason=str(e))
+        return
     
     try:
         while True:
             # Receive message from client
             data = await websocket.receive_json()
             
-            # Handle the message with actual display name
-            await chat_manager.handle_message(user_email, display_name, data)
+            # Handle the message with actual display name and room_id
+            await chat_manager.handle_message(user_email, display_name, data, room_id)
             
     except WebSocketDisconnect:
-        chat_manager.disconnect(user_email)
-        await chat_manager.broadcast_system_message(f"{display_name} left the chat")
-        await chat_manager.broadcast_user_list()
+        chat_manager.disconnect(user_email, room_id)
+        await chat_manager.broadcast_system_message(f"{display_name} left the chat", room_id=room_id)
+        await chat_manager.broadcast_user_list(room_id)
     except Exception as e:
-        logger.error(f"WebSocket error for {user_email}: {e}")
-        chat_manager.disconnect(user_email)
+        logger.error(f"WebSocket error for {user_email} in room {room_id}: {e}")
+        chat_manager.disconnect(user_email, room_id)
 
 @app.get("/chat/history")
-async def get_chat_history(limit: int = 50):
-    """Get recent chat history"""
+async def get_chat_history(limit: int = 50, room_id: str = "general"):
+    """Get recent chat history for a specific room"""
     try:
-        messages = chat_manager.db.get_recent_messages(limit=limit)
+        messages = chat_manager.db.get_recent_messages(limit=limit, room_id=room_id)
         return {"messages": messages, "count": len(messages)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get history: {str(e)}")
 
+@app.post("/chat/edit-message")
+async def edit_chat_message(
+    message_id: str,
+    new_content: str,
+    user_email: str
+):
+    """Edit a chat message (within 15 minute window)"""
+    try:
+        result = chat_manager.db.edit_message(message_id, new_content, user_email)
+        if result['success']:
+            return result
+        else:
+            raise HTTPException(status_code=400, detail=result['message'])
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to edit message: {str(e)}")
+
 @app.get("/chat/users")
-async def get_online_users():
-    """Get list of currently online users"""
-    users = list(chat_manager.active_connections.keys())
-    return {"users": users, "count": len(users)}
+async def get_online_users(room_id: str = "general"):
+    """Get list of currently online users in a specific room"""
+    if room_id in chat_manager.rooms:
+        users = list(chat_manager.rooms[room_id].keys())
+        return {"users": users, "count": len(users), "room_id": room_id}
+    return {"users": [], "count": 0, "room_id": room_id}
 
 @app.get("/{full_path:path}")
 async def serve_frontend(full_path: str):

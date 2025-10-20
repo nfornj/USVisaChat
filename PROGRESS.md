@@ -1,11 +1,197 @@
 # Visa Community Platform - Progress Tracker
 
-**Last Updated:** October 1, 2025  
+**Last Updated:** October 20, 2025  
 **Status:** ✅ Production Ready
 
 ---
 
 ## 🔧 Latest Changes
+
+### October 20, 2025 - Message Editing Feature (15-Minute Window) ✅
+
+**🎯 What changed**
+
+- **Edit Messages**: Users can now edit their own questions/information posts and replies within 15 minutes of posting
+- **Visual Edit UI**: Clean inline editing with TextField, Save (✓), and Cancel (✕) buttons
+- **Edit Window Enforcement**: Backend validates that edits are within the 15-minute time window
+- **Edited Indicator**: Messages show "(edited)" label after being modified
+- **Edit Button**: Small edit icon appears on user's own messages (fades in on hover)
+- **Works for All Message Types**: Both root topics (Questions/Information) and replies can be edited
+
+**📁 Files Modified**
+
+- `backend/models/mongodb_chat.py` — Enhanced `edit_message()` to enforce 15-minute window
+- `backend/api/main.py` — Added `/chat/edit-message` POST endpoint
+- `frontend/src/CommunityChat.tsx` — Added edit UI, state management, and API integration
+
+**🧩 Features**
+
+- **Time-Based Editing**: Only messages posted in last 15 minutes can be edited
+- **Author-Only**: Only the original author can edit their messages
+- **Inline Editing**: Click edit icon → TextField appears → Save or Cancel
+- **Real-Time Updates**: Edited messages update immediately in the UI
+- **Visual Feedback**:
+  - Edit icon (subtle, appears on hover)
+  - TextField with save/cancel buttons during edit
+  - "(edited)" indicator on edited messages
+- **Error Handling**: Clear error messages if edit window expired or unauthorized
+
+**🧪 Technical Details**
+
+- **MongoDB**: Stores `edited: true` and `edited_at` timestamp
+- **Backend**: Returns detailed error messages (e.g., "Edit window expired. Message was posted 20 minutes ago.")
+- **Frontend**:
+  - `canEditMessage()` checks if user is author and within 15-minute window
+  - `startEditingMessage()` opens TextField with current message
+  - `saveEditedMessage()` calls API and updates local state
+  - Edit button only visible to message author
+
+**🚀 Deployment**
+
+```bash
+cd frontend && npm run build
+docker compose --profile web build visa-web
+docker compose --profile web up visa-web -d --force-recreate
+```
+
+---
+
+### October 20, 2025 - Room-Based Chat Isolation for Articles ✅
+
+**🎯 What changed**
+
+- **Article-Specific Chat Rooms**: Each article now has its own isolated chat session
+- **No More Cross-Contamination**: Messages from different articles are completely separated
+- **Room-Based Architecture**:
+  - Backend manages separate WebSocket rooms per article/topic
+  - MongoDB filters all messages by `room_id`
+  - Frontend automatically connects to the correct room based on selected article
+- **Dynamic Room Switching**: When users navigate between articles, they seamlessly switch chat rooms
+- **Visual Indicators**: Chat header shows the article name and "Article Discussion" label
+
+**📁 Files Modified**
+
+- `backend/api/main.py` — WebSocket endpoint accepts `room_id` parameter
+- `backend/models/community_chat.py` — Complete room isolation: ConnectionManager now manages separate rooms, all broadcasts are room-specific
+- `frontend/src/CommunityChat.tsx` — Accepts `roomId` and `roomName` props, connects to specific room
+- `frontend/src/App.tsx` — Passes selected article's ID and name to CommunityChat
+
+**🧩 Architecture**
+
+**Before:** Single global chat where all users saw all messages regardless of which article they clicked
+
+**After:** Room-based isolation where:
+
+- Each article has unique `room_id` (e.g., "h1b-basics", "h1b-lottery-2025")
+- WebSocket connections are per-room: `/ws/chat/{email}/{name}/{room_id}`
+- MongoDB queries filter by `room_id`
+- Users only see messages from their current article discussion
+- "General Discussion" room (`room_id: "general"`) remains for community-wide chat
+
+**🧪 Technical Details**
+
+- **ConnectionManager**: Changed from `Dict[email, connection]` to `Dict[room_id, Dict[email, connection]]`
+- **Broadcasts**: All messages are room-scoped (only sent to users in that room)
+- **User Lists**: Online user counts are per-room
+- **Auto-Reconnect**: When user switches articles, WebSocket reconnects to new room
+- **MongoDB**: All queries include `room_id` filter for proper data isolation
+
+**🚀 User Flow**
+
+1. User clicks "Join Discussion" on H1B Basics article → enters `h1b-basics` room
+2. User clicks "Join Discussion" on H1B Lottery article → automatically switches to `h1b-lottery-2025` room
+3. Each room has independent messages, users, and topics
+4. No mixing of discussions across different articles
+
+**🚀 Deployment**
+
+```bash
+cd frontend && npm run build
+docker compose --profile web up visa-web -d --force-recreate
+```
+
+---
+
+### October 20, 2025 - Complete Chat Redesign: Topic Isolation & Natural Replies ✅
+
+**🎯 What changed**
+
+- **Topic Isolation**: When a topic is selected, only that topic's thread is displayed (no more mixing of different topics)
+- **Natural Reply UI**: Replies now have transparent backgrounds and look like normal chat messages (not blue bubbles)
+- **MongoDB Schema Update**: Added `topic_id` field to messages for proper thread segregation
+- **Backend Logic**: `save_message` now computes and stores `topic_id` to group replies under the correct topic root
+- **Two-View System**:
+  - Topics Overview: Shows all topics as clickable cards with reply counts
+  - Thread View: Shows selected topic's full conversation with natural chat flow
+- **Visual Improvements**:
+  - Bold, highlighted topic headers with colored badges (Question/Information)
+  - Clean, transparent reply bubbles with avatars and timestamps
+  - Smooth transitions and hover effects
+  - Back button to return to topics overview
+
+**📁 Files Modified**
+
+- `backend/models/mongodb_chat.py` — Added `topic_id` field; compute and inherit topic_id for replies
+- `frontend/src/CommunityChat.tsx` — Complete UI redesign: topic isolation, natural chat UI, two-view system
+- `docker-compose.yml` — Bind mount ensures latest frontend build is served
+
+**🧩 Design Principles**
+
+- **Topic Isolation**: Each chat session is now truly isolated - selecting a topic shows only that topic's conversation
+- **Natural Chat Flow**: Replies look like normal chat messages (transparent, with name + timestamp header)
+- **Clear Visual Hierarchy**: Topics are bold and highlighted, replies flow naturally underneath
+- **Professional Aesthetics**: Consistent with home page design, smooth transitions, modern UI
+
+**🧪 Technical Details**
+
+- **MongoDB**: Every message now stores `topic_id` (null for root topics, parent's topic_id for replies)
+- **Frontend**: Conditional rendering based on `selectedTopicId` - shows either all topics or isolated thread
+- **Thread Building**: Messages are grouped by `topic_id` for proper isolation and display
+
+**🚀 Deployment**
+
+```bash
+cd frontend && npm run build
+docker compose --profile web up visa-web -d --force-recreate
+```
+
+---
+
+### October 20, 2025 - Professional Chat UI with Pinned Questions ✅
+
+**🎯 What changed**
+
+- Added a right-side Questions panel that auto-pins question posts
+- Introduced compose mode: Auto, Question, Info
+- Client-side classification for questions ("?" heuristic when Auto)
+- Click-to-jump from Questions panel to target message with highlight
+- Resizable Questions panel with persisted width
+- Synced Tailwind `dark` class with MUI theme for universal theming
+
+**📁 Files Modified**
+
+- `frontend/src/App.tsx` — Sync Tailwind dark mode with MUI theme
+- `frontend/src/CommunityChat.tsx` — Questions panel, compose mode, jump/highlight, tokenized styles
+
+**🧩 Design Principles**
+
+- Single source of truth for tokens via MUI theme + Tailwind sync
+- Non-intrusive additions: existing flow preserved
+- Professional, consistent visuals across light/dark
+- Future-ready for "Mine/Open/Resolved" filters
+
+**🧪 Status**
+
+- Build clean, no lint errors
+
+**🚀 Deployment Note**
+
+- Mounted `frontend/dist` into Docker services (`visa-web`, `visa-web-prod`, `visa-prod`) so the running containers serve the latest build without image rebuilds. Run:
+
+```bash
+cd frontend && npm run build
+cd .. && docker compose --profile web up visa-web -d --force-recreate
+```
 
 ### October 11, 2025 - Vector Database Integration & Enhanced Chat ✅
 

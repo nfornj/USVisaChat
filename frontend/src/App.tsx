@@ -69,6 +69,16 @@ function App() {
     [darkMode]
   );
 
+  // Keep Tailwind's dark mode in sync with MUI theme
+  useEffect(() => {
+    const root = document.documentElement;
+    if (darkMode) {
+      root.classList.add("dark");
+    } else {
+      root.classList.remove("dark");
+    }
+  }, [darkMode]);
+
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     const saved = localStorage.getItem("visa-active-tab");
     return (saved as TabType) || "topics";
@@ -704,6 +714,8 @@ function App() {
                   userEmail={userProfile.email}
                   displayName={userProfile.displayName}
                   onOnlineCountChange={setOnlineCount}
+                  roomId={selectedTopic?.id || "general"}
+                  roomName={selectedTopic?.name || "General Discussion"}
                 />
               )}
               {activeTab === "ai" && <AIAssistant />}

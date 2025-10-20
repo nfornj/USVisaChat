@@ -164,6 +164,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./certificates:/app/certificates
+      - ./frontend/dist:/app/frontend/dist:ro
     env_file:
       - .env
     environment:
@@ -201,6 +202,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./certificates:/app/certificates
+      - ./frontend/dist:/app/frontend/dist:ro
     env_file:
       - .env
     environment:
@@ -238,6 +240,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./certificates:/app/certificates
+      - ./frontend/dist:/app/frontend/dist:ro
     env_file:
       - .env
     environment:
