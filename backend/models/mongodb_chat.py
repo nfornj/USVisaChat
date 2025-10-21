@@ -5,7 +5,7 @@ Handles chat messages storage and retrieval with full history
 
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from bson import ObjectId
 from models.mongodb_connection import mongodb_client
 
@@ -227,6 +227,9 @@ class MongoDBChatDatabase:
             
             # Check if within edit window (15 minutes by default)
             message_time = message['created_at']
+            # Ensure message_time is timezone-aware
+            if message_time.tzinfo is None:
+                message_time = message_time.replace(tzinfo=timezone.utc)
             current_time = datetime.now(timezone.utc)
             time_diff = current_time - message_time
             

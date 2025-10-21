@@ -83,6 +83,11 @@ class UpdateProfileResponse(BaseModel):
     message: str
     user: Optional[Dict[str, Any]] = None
 
+class EditMessageRequest(BaseModel):
+    message_id: str
+    new_content: str
+    user_email: str
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Visa Conversation MCP Server",
@@ -717,14 +722,14 @@ async def get_chat_history(limit: int = 50, room_id: str = "general"):
         raise HTTPException(status_code=500, detail=f"Failed to get history: {str(e)}")
 
 @app.post("/chat/edit-message")
-async def edit_chat_message(
-    message_id: str,
-    new_content: str,
-    user_email: str
-):
+async def edit_chat_message(request: EditMessageRequest):
     """Edit a chat message (within 15 minute window)"""
     try:
-        result = chat_manager.db.edit_message(message_id, new_content, user_email)
+        result = chat_manager.db.edit_message(
+            request.message_id, 
+            request.new_content, 
+            request.user_email
+        )
         if result['success']:
             return result
         else:

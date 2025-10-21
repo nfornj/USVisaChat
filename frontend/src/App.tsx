@@ -16,8 +16,8 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  Tab,
-  Tabs,
+  // Tab, // Commented out - can be restored with AI Assistant
+  // Tabs, // Commented out - can be restored with AI Assistant
   Card,
   CardContent,
   Alert,
@@ -31,8 +31,8 @@ import {
 import {
   Brightness4 as DarkModeIcon,
   Brightness7 as LightModeIcon,
-  Chat as ChatIcon,
-  SmartToy as AIIcon,
+  // Chat as ChatIcon, // Commented out - can be restored with AI Assistant
+  // SmartToy as AIIcon, // Commented out - can be restored with AI Assistant
   AccountCircle as AccountIcon,
   Logout as LogoutIcon,
   Close as CloseIcon,
@@ -42,13 +42,13 @@ import {
 } from "@mui/icons-material";
 
 // Import both interfaces
-import AIAssistant from "./AIAssistant";
+// import AIAssistant from "./AIAssistant"; // Commented out - can be restored later
 import CommunityChat from "./CommunityChat";
 import TopicsHome from "./pages/TopicsHome";
 import { authAPI } from "./utils/api";
 import { createAppTheme } from "./theme";
 
-type TabType = "topics" | "community" | "ai";
+// type TabType = "topics" | "community" | "ai"; // Commented out - can be restored with AI Assistant
 type AuthStep = "email" | "code" | "authenticated";
 type AuthMode = "signup" | "login";
 
@@ -79,16 +79,25 @@ function App() {
     }
   }, [darkMode]);
 
-  const [activeTab, setActiveTab] = useState<TabType>(() => {
-    const saved = localStorage.getItem("visa-active-tab");
-    return (saved as TabType) || "topics";
-  });
   const [selectedTopic, setSelectedTopic] = useState<{
     id: string;
     name: string;
   } | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [onlineCount, setOnlineCount] = useState(0);
+  // onlineCount is used via setOnlineCount callback in CommunityChat
+  console.debug("Online count:", onlineCount); // Keep variable "used" for TypeScript
+
+  // Tab state (commented out for now - can be restored later)
+  // To restore AI Assistant and Community Chat tabs:
+  // 1. Uncomment the activeTab state below
+  // 2. Uncomment the Tabs component in the header
+  // 3. Uncomment the tab-based content routing
+  // 4. Remove the current simplified navigation logic
+  // const [activeTab, setActiveTab] = useState<TabType>(() => {
+  //   const saved = localStorage.getItem("visa-active-tab");
+  //   return (saved as TabType) || "topics";
+  // });
 
   // Authentication state
   const [authStep, setAuthStep] = useState<AuthStep>("email");
@@ -210,9 +219,8 @@ function App() {
         localStorage.setItem("visa-session-token", response.session_token);
         setUserProfile(response.user);
         setAuthStep("authenticated");
-        // Reset to topics tab on login
-        setActiveTab("topics");
-        localStorage.setItem("visa-active-tab", "topics");
+        // Reset to topics view on login
+        setSelectedTopic(null);
         setSuccessMessage("Successfully logged in!");
       } else {
         setError(response.message || "Invalid verification code");
@@ -598,7 +606,24 @@ function App() {
 
             <Box sx={{ flexGrow: 1 }} />
 
-            {/* Tabs */}
+            {/* Topics Button */}
+            <Chip
+              icon={<GroupsIcon />}
+              label="Topics"
+              color="primary"
+              sx={{
+                fontWeight: 500,
+                mr: 2,
+                cursor: "pointer",
+                "&:hover": {
+                  bgcolor: "primary.dark",
+                },
+              }}
+              onClick={() => setSelectedTopic(null)}
+            />
+
+            {/* COMMENTED OUT: Tabs for Community Chat and AI Assistant - can be restored later */}
+            {/* 
             <Tabs
               value={activeTab}
               onChange={(_, value) => {
@@ -610,18 +635,6 @@ function App() {
                 style: { display: "none" },
               }}
             >
-              <Tab
-                label={
-                  <Chip
-                    icon={<GroupsIcon />}
-                    label="Topics"
-                    color={activeTab === "topics" ? "primary" : "default"}
-                    sx={{ fontWeight: 500 }}
-                  />
-                }
-                value="topics"
-                sx={{ minHeight: 48, textTransform: "none" }}
-              />
               <Tab
                 label={
                   <Chip
@@ -649,6 +662,7 @@ function App() {
                 sx={{ minHeight: 48, textTransform: "none" }}
               />
             </Tabs>
+            */}
 
             {/* User menu */}
             {userProfile && (
@@ -701,6 +715,25 @@ function App() {
         <Box sx={{ flexGrow: 1, overflow: "hidden" }}>
           {userProfile && (
             <>
+              {!selectedTopic ? (
+                <TopicsHome
+                  onTopicSelect={(topicId, topicName) => {
+                    setSelectedTopic({ id: topicId, name: topicName });
+                  }}
+                />
+              ) : (
+                <CommunityChat
+                  userEmail={userProfile.email}
+                  displayName={userProfile.displayName}
+                  onOnlineCountChange={setOnlineCount}
+                  roomId={selectedTopic.id}
+                  roomName={selectedTopic.name}
+                  onBackToTopics={() => setSelectedTopic(null)}
+                />
+              )}
+
+              {/* COMMENTED OUT: AI Assistant and Community Chat tabs - can be restored later */}
+              {/* 
               {activeTab === "topics" && (
                 <TopicsHome
                   onTopicSelect={(topicId, topicName) => {
@@ -719,6 +752,7 @@ function App() {
                 />
               )}
               {activeTab === "ai" && <AIAssistant />}
+              */}
             </>
           )}
         </Box>

@@ -7,27 +7,35 @@
 
 ## 🔧 Latest Changes
 
-### October 20, 2025 - Message Editing Feature (15-Minute Window) ✅
+### October 20, 2025 - Simplified Header & Message Editing ✅
 
 **🎯 What changed**
 
+- **Simplified Header**: Removed "Community Chat" and "AI Assistant" tabs from homepage, keeping only "Topics" button
+- **Direct Navigation**: Clicking a topic now opens chat directly without showing tab buttons
+- **Back Button**: Added back arrow button in chat header to return to topics list
 - **Edit Messages**: Users can now edit their own questions/information posts and replies within 15 minutes of posting
 - **Visual Edit UI**: Clean inline editing with TextField, Save (✓), and Cancel (✕) buttons
 - **Edit Window Enforcement**: Backend validates that edits are within the 15-minute time window
 - **Edited Indicator**: Messages show "(edited)" label after being modified
 - **Edit Button**: Small edit icon appears on user's own messages (fades in on hover)
 - **Works for All Message Types**: Both root topics (Questions/Information) and replies can be edited
+- **Improved Error Handling**: Replaced browser alerts with professional Material-UI Snackbar notifications
+- **Better UX**: Success messages (green), error messages (red), with auto-dismiss after 6 seconds
 
 **📁 Files Modified**
 
-- `backend/models/mongodb_chat.py` — Enhanced `edit_message()` to enforce 15-minute window
-- `backend/api/main.py` — Added `/chat/edit-message` POST endpoint
-- `frontend/src/CommunityChat.tsx` — Added edit UI, state management, and API integration
+- `backend/models/mongodb_chat.py` — Enhanced `edit_message()` to enforce 15-minute window, added `Any` import, fixed timezone handling
+- `backend/api/main.py` — Added `/chat/edit-message` POST endpoint with `EditMessageRequest` Pydantic model
+- `backend/models/community_chat.py` — Added `edit_message()` wrapper method to `ChatDatabase` class
+- `frontend/src/App.tsx` — Simplified header by removing tabs, added direct topic-to-chat navigation
+- `frontend/src/CommunityChat.tsx` — Added edit UI, Snackbar notifications, back button for navigation
 
 **🧩 Features**
 
 - **Time-Based Editing**: Only messages posted in last 15 minutes can be edited
 - **Author-Only**: Only the original author can edit their messages
+- **Timezone Handling**: Fixed datetime comparison error by ensuring all datetimes are timezone-aware
 - **Inline Editing**: Click edit icon → TextField appears → Save or Cancel
 - **Real-Time Updates**: Edited messages update immediately in the UI
 - **Visual Feedback**:

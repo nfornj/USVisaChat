@@ -46,6 +46,13 @@ class ChatDatabase:
             logger.warning("⚠️  Cannot get messages - MongoDB not available")
             return []
         return self.db.get_recent_messages(limit=limit, room_id=room_id)
+    
+    def edit_message(self, message_id: str, new_content: str, user_email: str, edit_window_minutes: int = 15) -> Dict:
+        """Edit a chat message (wrapper for MongoDB method)"""
+        if not self.db:
+            logger.warning("⚠️  Cannot edit message - MongoDB not available")
+            return {'success': False, 'message': 'Database not available'}
+        return self.db.edit_message(message_id, new_content, user_email, edit_window_minutes)
 
 
 class ConnectionManager:

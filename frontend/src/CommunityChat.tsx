@@ -16,6 +16,7 @@ import {
   Divider,
   ToggleButton,
   ToggleButtonGroup,
+  Snackbar,
 } from "@mui/material";
 import {
   Send as SendIcon,
@@ -61,6 +62,7 @@ interface CommunityChatProps {
   onOnlineCountChange: (count: number) => void;
   roomId?: string; // Article/topic ID for room isolation
   roomName?: string; // Article/topic name for display
+  onBackToTopics?: () => void; // Callback to go back to topics list
 }
 
 export default function CommunityChat({
@@ -69,6 +71,7 @@ export default function CommunityChat({
   onOnlineCountChange,
   roomId = "general",
   roomName = "General Discussion",
+  onBackToTopics,
 }: CommunityChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -82,6 +85,17 @@ export default function CommunityChat({
     string | number | null
   >(null);
   const [editContent, setEditContent] = useState("");
+
+  // Snackbar state for error/success messages
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: "success" | "error" | "info";
+  }>({
+    open: false,
+    message: "",
+    severity: "info",
+  });
 
   // Image upload state
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
@@ -427,14 +441,27 @@ export default function CommunityChat({
               : m
           )
         );
+        setSnackbar({
+          open: true,
+          message: "Message edited successfully",
+          severity: "success",
+        });
         cancelEditing();
       } else {
         const error = await response.json();
-        alert(error.detail || "Failed to edit message");
+        setSnackbar({
+          open: true,
+          message: error.detail || "Failed to edit message",
+          severity: "error",
+        });
       }
     } catch (error) {
       console.error("Error editing message:", error);
-      alert("Failed to edit message");
+      setSnackbar({
+        open: true,
+        message: "Failed to edit message. Please try again.",
+        severity: "error",
+      });
     }
   };
 
@@ -876,6 +903,21 @@ export default function CommunityChat({
           }}
         >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+            {onBackToTopics && (
+              <IconButton
+                onClick={onBackToTopics}
+                size="small"
+                sx={{
+                  color: "text.secondary",
+                  "&:hover": {
+                    color: "primary.main",
+                    bgcolor: "action.hover",
+                  },
+                }}
+              >
+                <ArrowBackIcon />
+              </IconButton>
+            )}
             <Box
               sx={{
                 width: 8,
@@ -1836,6 +1878,23 @@ export default function CommunityChat({
           />
         </Box>
       </Paper>
+
+      {/* Snackbar for error/success messages */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
