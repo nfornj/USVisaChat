@@ -16,6 +16,101 @@
 
 ---
 
+## 🔧 CRITICAL: ENVIRONMENT CONFIGURATION RULES
+
+### **ALWAYS Load Environment Variables in Production Code**
+
+**MANDATORY:** Any Python application entry point (main.py, app.py, server.py) MUST load `.env` files:
+
+```python
+from dotenv import load_dotenv
+from pathlib import Path
+
+# Load environment variables from .env file (REQUIRED for production)
+load_dotenv(Path(__file__).parent.parent / ".env")
+```
+
+### **Key Rules:**
+
+1. **ALWAYS** add `load_dotenv()` at the top of FastAPI/Flask/Django entry points
+2. **NEVER** assume environment variables are automatically loaded
+3. **ALWAYS** use `python-dotenv` package for loading `.env` files
+4. **MongoDB MUST** connect to Atlas URL (never localhost in production)
+5. **Test** environment variable loading after any refactoring
+
+### **Why This Matters:**
+
+- Docker loads `.env` automatically, but local `uvicorn`/`python` does NOT
+- Missing `load_dotenv()` causes apps to use defaults (e.g., localhost instead of Atlas)
+- This was the root cause of the MongoDB connection failure on 2025-10-22
+
+---
+
+## 🌐 CRITICAL: FRONTEND API CONFIGURATION RULES
+
+### **ALWAYS Configure Frontend API URLs Correctly**
+
+**MANDATORY:** Frontend API configuration MUST match backend endpoint patterns:
+
+```typescript
+// CORRECT: Empty base URL for direct proxy routing
+const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || "";
+
+// WRONG: VITE_API_URL=/api causes double prefixing
+// Frontend calls: /api/auth/request-code
+// Backend expects: /auth/request-code
+```
+
+### **Key Rules:**
+
+1. **ALWAYS** check backend endpoint patterns before setting `VITE_API_URL`
+2. **Auth endpoints**: `/auth/...` (no `/api` prefix) → Use empty `VITE_API_URL`
+3. **News endpoints**: `/api/ai-news` (with `/api` prefix) → Use `VITE_API_URL=/api`
+4. **NEVER** assume all endpoints use the same prefix pattern
+5. **ALWAYS** test both auth and news APIs after configuration changes
+6. **ALWAYS** verify proxy configuration matches endpoint patterns
+
+### **Endpoint Pattern Rules:**
+
+- **Auth endpoints**: `/auth/request-code`, `/auth/verify-code` → No `/api` prefix
+- **News endpoints**: `/api/ai-news`, `/api/ai-news/status` → With `/api` prefix
+- **Health endpoints**: `/health` → No `/api` prefix
+
+### **Vite Proxy Configuration:**
+
+```typescript
+// CORRECT: Separate rules for different patterns
+proxy: {
+  '/api': {
+    target: 'http://localhost:8000',
+    changeOrigin: true,
+    // Keep /api prefix for news endpoints
+  },
+  '/auth': {
+    target: 'http://localhost:8000',
+    changeOrigin: true,
+    // Direct proxy for auth endpoints
+  },
+}
+```
+
+### **Why This Matters:**
+
+- **Wrong API URL** causes "Failed to send verification code" errors
+- **Double prefixing** (`/api/api/...`) causes 404 errors
+- **Missing prefix** causes 404 errors for news endpoints
+- **This was the root cause of authentication failures on 2025-10-22**
+
+### **Testing Checklist:**
+
+1. ✅ Test auth endpoints: `curl -X POST http://localhost:3000/auth/request-code`
+2. ✅ Test news endpoints: `curl -X POST http://localhost:3000/api/ai-news`
+3. ✅ Verify both return success responses
+4. ✅ Check browser console for API errors
+5. ✅ Verify proxy configuration matches backend patterns
+
+---
+
 ## 📝 THREE FILES RULE
 
 **ONLY THREE DOCUMENTATION FILES ALLOWED:**

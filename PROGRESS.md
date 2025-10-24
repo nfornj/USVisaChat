@@ -1,11 +1,110 @@
 # Visa Community Platform - Progress Tracker
 
-**Last Updated:** October 20, 2025  
+**Last Updated:** October 23, 2025  
 **Status:** ✅ Production Ready
 
 ---
 
 ## 🔧 Latest Changes
+
+### October 23, 2025 - AI News UI Redesign ✅
+
+**What changed**
+
+- Simplified `AINews` into clean horizontal cards (image left, content right)
+- Clear sections for AI summary, source, time-ago, and tags
+- Reduced visual noise: removed heavy gradients, hover overlays, and oversized shadows
+- Kept performance-friendly MUI components and responsive layout
+
+**Why**
+
+- Improve readability and scannability
+- Align with a straightforward, news-first design that “just works”
+
+**Files**
+
+- `frontend/src/components/AINews.tsx` — simplified header, card layout, summary box, actions
+
+---
+
+### October 23, 2025 - CRITICAL FIX: Environment Variables Loading ✅
+
+**🐛 Issue Fixed**
+
+- **MongoDB Connection Failure**: Application was trying to connect to `localhost:27017` instead of MongoDB Atlas
+- **Root Cause**: Missing `load_dotenv()` in `backend/api/main.py` - the code NEVER loaded `.env` files
+- **Why It Worked Before**: Docker automatically loads `.env`, but local `uvicorn` does NOT
+- **Impact**: Authentication completely broken, all database operations failing
+
+**✅ Solution Implemented**
+
+- Added `from dotenv import load_dotenv` to `backend/api/main.py`
+- Added `load_dotenv(Path(__file__).parent.parent.parent / ".env")` before any imports that use environment variables
+- Updated `.cursorrules` with **MANDATORY environment configuration rules** to prevent this from happening again
+- Fixed certificate path from Docker path (`/app/certificates/`) to local path
+- Fixed Ollama host from Docker (`host.docker.internal`) to localhost
+
+**📝 Files Changed**
+
+- `backend/api/main.py` - Added dotenv loading (lines 26-29)
+- `.env` - Fixed Docker-specific paths to local paths
+- `.cursorrules` - Added critical environment configuration section
+
+**🎯 Result**
+
+- ✅ MongoDB Atlas connection working with X.509 certificate authentication
+- ✅ User authentication flow working (verification codes sent successfully)
+- ✅ All database operations restored
+- ✅ Application fully functional locally and in production
+
+**🔒 Prevention**
+
+- Added comprehensive rules in `.cursorrules` to ensure `load_dotenv()` is ALWAYS added to entry points
+- Documented this issue as a lesson learned for future development
+
+---
+
+### October 21, 2024 - AI News Feature with Perplexity-Style Animations ✅
+
+**🎯 What changed**
+
+- **AI News Button**: Added "AI News" button next to Topics button in header with secondary color styling
+- **AI News Component**: Created comprehensive AINews.tsx component with professional news layout
+- **Perplexity Integration**: Added backend API endpoint `/api/ai-news` for H1B news search using Perplexity API
+- **Professional News Cards**: News cards with images, AI summaries, source links, publication dates, and tags
+- **Navigation Integration**: Seamlessly integrated AI News into main app navigation with proper routing
+- **AI Summaries**: Each news article includes AI-generated summaries for better understanding
+- **Source Links**: Direct links to original news sources with external link icons
+- **Responsive Design**: Professional grid layout that works on all screen sizes
+- **Loading States**: Proper loading indicators and error handling for news fetching
+- **Refresh Functionality**: Manual refresh button to get latest news updates
+- **✨ Perplexity-Style Animations**: Added beautiful shimmer and glow effects similar to Perplexity
+- **✨ Animated Text**: All text elements have shimmer animations with gradient backgrounds
+- **✨ Pulsing Cards**: News cards pulse gently with hover effects
+- **✨ Animated Tags**: Tags have staggered shimmer animations
+- **✨ Glowing Headers**: Main titles and subtitles have glow effects on hover
+- **✨ Shimmer Loading**: Loading states have animated shimmer text
+- **✨ Animated Buttons**: AI News button has shimmer, glow, and pulse animations
+- **✨ Button Hover Effects**: Enhanced hover effects with scaling and glow
+- **✨ Icon Animations**: Button icons pulse and animate on interaction
+- **✨ Gradient Button Text**: Button text has shimmer gradient effects
+
+**🔧 Technical Details**
+
+- **Frontend**: React component with Material-UI for professional styling
+- **Backend**: FastAPI endpoint with Perplexity API integration for real-time news
+- **State Management**: Proper React state management for news articles and loading states
+- **Error Handling**: Comprehensive error handling for API failures and network issues
+- **TypeScript**: Full TypeScript support with proper interfaces for news articles
+- **Animations**: CSS keyframes with shimmer, glow, and pulse effects
+- **Gradient Text**: Linear gradient backgrounds with text clipping for shimmer effects
+- **Staggered Animations**: Different timing for tags and elements for visual appeal
+- **Hover Effects**: Interactive animations that respond to user interactions
+- **Performance**: Optimized animations using CSS transforms and opacity
+- **Button Animations**: Shimmer, glow, and pulse effects on navigation buttons
+- **Interactive Elements**: Hover effects with scaling and enhanced visual feedback
+- **Gradient Overlays**: Shimmer effects with gradient text and background animations
+- **Icon Animations**: Pulsing icons that respond to user interactions
 
 ### October 20, 2025 - Simplified Header & Message Editing ✅
 

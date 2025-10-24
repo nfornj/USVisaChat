@@ -18,8 +18,6 @@ import {
   TextField,
   // Tab, // Commented out - can be restored with AI Assistant
   // Tabs, // Commented out - can be restored with AI Assistant
-  Card,
-  CardContent,
   Alert,
   Chip,
   CircularProgress,
@@ -27,6 +25,7 @@ import {
   Stack,
   ToggleButtonGroup,
   ToggleButton,
+  keyframes,
 } from "@mui/material";
 import {
   Brightness4 as DarkModeIcon,
@@ -39,12 +38,42 @@ import {
   Email as EmailIcon,
   Lock as LockIcon,
   Groups as GroupsIcon,
+  Article as ArticleIcon,
 } from "@mui/icons-material";
+
+// Animation keyframes for button effects
+const shimmer = keyframes`
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
+`;
+
+const glow = keyframes`
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.2), 0 0 30px rgba(0, 0, 0, 0.1);
+  }
+`;
+
+const pulse = keyframes`
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+`;
 
 // Import both interfaces
 // import AIAssistant from "./AIAssistant"; // Commented out - can be restored later
 import CommunityChat from "./CommunityChat";
 import TopicsHome from "./pages/TopicsHome";
+import AINews from "./components/AINews";
 import { authAPI } from "./utils/api";
 import { createAppTheme } from "./theme";
 
@@ -94,10 +123,10 @@ function App() {
   // 2. Uncomment the Tabs component in the header
   // 3. Uncomment the tab-based content routing
   // 4. Remove the current simplified navigation logic
-  // const [activeTab, setActiveTab] = useState<TabType>(() => {
-  //   const saved = localStorage.getItem("visa-active-tab");
-  //   return (saved as TabType) || "topics";
-  // });
+  const [activeTab, setActiveTab] = useState<"topics" | "news">(() => {
+    const saved = localStorage.getItem("visa-active-tab");
+    return (saved as "topics" | "news") || "topics";
+  });
 
   // Authentication state
   const [authStep, setAuthStep] = useState<AuthStep>("email");
@@ -126,6 +155,9 @@ function App() {
     localStorage.setItem("visa-dark-mode", JSON.stringify(newMode));
   };
 
+  // Show login dialog when needed
+  const [showAuthDialog, setShowAuthDialog] = useState(false);
+
   // Check for saved session
   useEffect(() => {
     const checkSession = async () => {
@@ -148,6 +180,16 @@ function App() {
 
     checkSession();
   }, []);
+
+  // Handle topic selection - require auth
+  const handleTopicSelect = (topicId: string, topicName: string) => {
+    if (!userProfile) {
+      // Show login dialog
+      setShowAuthDialog(true);
+    } else {
+      setSelectedTopic({ id: topicId, name: topicName });
+    }
+  };
 
   const handleRequestCode = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -313,271 +355,191 @@ function App() {
     }
   };
 
-  // Email input screen (Step 1)
-  if (authStep === "email") {
-    return (
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <Box
-          sx={{
-            minHeight: "100vh",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: darkMode
-              ? "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)"
-              : "linear-gradient(135deg, #EEF2FF 0%, #F3E8FF 100%)",
-            p: 2,
-          }}
-        >
-          <Card sx={{ maxWidth: 480, width: "100%", p: 2 }}>
-            <CardContent>
-              <Box sx={{ textAlign: "center", mb: 4 }}>
-                <Avatar
-                  sx={{
-                    width: 80,
-                    height: 80,
-                    mx: "auto",
-                    mb: 2,
-                    background:
-                      "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)",
-                  }}
-                >
-                  <GroupsIcon sx={{ fontSize: 40 }} />
-                </Avatar>
-                <Typography variant="h4" fontWeight="bold" gutterBottom>
-                  {authMode === "signup"
-                    ? "Join Visa Community"
-                    : "Welcome Back"}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {authMode === "signup"
-                    ? "Create your account to get started"
-                    : "Login to your account"}
-                </Typography>
-              </Box>
+  // Auth dialog (overlay)
+  const renderAuthDialog = () => {
+    if (!showAuthDialog) return null;
 
-              {/* Toggle between Sign Up and Login */}
-              <ToggleButtonGroup
-                value={authMode}
-                exclusive
-                onChange={(_, value) => {
-                  if (value !== null) {
-                    setAuthMode(value);
-                    setError("");
-                    setSuccessMessage("");
-                    setDisplayName("");
-                  }
+    // Email input step
+    if (authStep === "email") {
+      return (
+        <Dialog open={showAuthDialog} onClose={() => setShowAuthDialog(false)} maxWidth="sm" fullWidth>
+          <DialogTitle>
+            <Box sx={{ textAlign: "center" }}>
+              <Avatar
+                sx={{
+                  width: 64,
+                  height: 64,
+                  mx: "auto",
+                  mb: 1,
+                  background: "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)",
                 }}
-                fullWidth
-                sx={{ mb: 3 }}
               >
-                <ToggleButton value="login">Login</ToggleButton>
-                <ToggleButton value="signup">Sign Up</ToggleButton>
-              </ToggleButtonGroup>
+                <GroupsIcon sx={{ fontSize: 32 }} />
+              </Avatar>
+              <Typography variant="h5" fontWeight="bold">
+                {authMode === "signup" ? "Join H1B Visa Community" : "Welcome Back"}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {authMode === "signup" ? "Create your account to get started" : "Login to your account"}
+              </Typography>
+            </Box>
+          </DialogTitle>
+          <DialogContent>
+            <ToggleButtonGroup
+              value={authMode}
+              exclusive
+              onChange={(_, value) => {
+                if (value !== null) {
+                  setAuthMode(value);
+                  setError("");
+                  setSuccessMessage("");
+                  setDisplayName("");
+                }
+              }}
+              fullWidth
+              sx={{ mb: 2, mt: 1 }}
+            >
+              <ToggleButton value="login">Login</ToggleButton>
+              <ToggleButton value="signup">Sign Up</ToggleButton>
+            </ToggleButtonGroup>
 
-              {error && (
-                <Alert severity="error" sx={{ mb: 2 }}>
-                  {error}
-                </Alert>
-              )}
+            {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-              <form onSubmit={handleRequestCode}>
-                <Stack spacing={2.5}>
-                  {authMode === "signup" && (
-                    <TextField
-                      label="Your Name"
-                      value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
-                      placeholder="e.g., Alice Johnson"
-                      required={authMode === "signup"}
-                      fullWidth
-                      autoFocus={authMode === "signup"}
-                    />
-                  )}
-
+            <form onSubmit={handleRequestCode}>
+              <Stack spacing={2}>
+                {authMode === "signup" && (
                   <TextField
-                    type="email"
-                    label="Email Address"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    required
+                    label="Your Name"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder="e.g., Alice Johnson"
+                    required={authMode === "signup"}
                     fullWidth
-                    autoFocus={authMode === "login"}
-                    InputProps={{
-                      startAdornment: (
-                        <EmailIcon sx={{ mr: 1, color: "text.secondary" }} />
-                      ),
-                    }}
+                    autoFocus={authMode === "signup"}
                   />
-
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    size="large"
-                    fullWidth
-                    disabled={loading}
-                    startIcon={
-                      loading ? <CircularProgress size={20} /> : <LockIcon />
-                    }
-                  >
-                    {loading ? "Sending..." : "Continue"}
-                  </Button>
-                </Stack>
-              </form>
-
-              <Box sx={{ mt: 3, textAlign: "center" }}>
-                <Typography variant="caption" color="text.secondary">
-                  By continuing, you agree to receive a verification code via
-                  email
-                </Typography>
-              </Box>
-            </CardContent>
-          </Card>
-
-          {/* Dark mode toggle */}
-          <IconButton
-            onClick={toggleDarkMode}
-            sx={{
-              position: "absolute",
-              top: 16,
-              right: 16,
-            }}
-          >
-            {darkMode ? <LightModeIcon /> : <DarkModeIcon />}
-          </IconButton>
-        </Box>
-      </ThemeProvider>
-    );
-  }
-
-  // Code verification screen (Step 2)
-  if (authStep === "code") {
-    return (
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <Box
-          sx={{
-            minHeight: "100vh",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: darkMode
-              ? "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)"
-              : "linear-gradient(135deg, #EEF2FF 0%, #F3E8FF 100%)",
-            p: 2,
-          }}
-        >
-          <Card sx={{ maxWidth: 480, width: "100%", p: 2 }}>
-            <CardContent>
-              <Box sx={{ textAlign: "center", mb: 4 }}>
-                <Avatar
-                  sx={{
-                    width: 80,
-                    height: 80,
-                    mx: "auto",
-                    mb: 2,
-                    background:
-                      "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)",
+                )}
+                <TextField
+                  type="email"
+                  label="Email Address"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  required
+                  fullWidth
+                  autoFocus={authMode === "login"}
+                  InputProps={{
+                    startAdornment: <EmailIcon sx={{ mr: 1, color: "text.secondary" }} />,
                   }}
-                >
-                  <LockIcon sx={{ fontSize: 40 }} />
-                </Avatar>
-                <Typography variant="h4" fontWeight="bold" gutterBottom>
-                  Enter Verification Code
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  We sent a 6-digit code to
-                </Typography>
-                <Chip label={email} sx={{ mt: 1 }} />
-              </Box>
+                />
+              </Stack>
+            </form>
 
-              {error && (
-                <Alert severity="error" sx={{ mb: 2 }}>
-                  {error}
-                </Alert>
-              )}
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 2, textAlign: "center" }}>
+              By continuing, you agree to receive a verification code via email
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3 }}>
+            <Button onClick={() => setShowAuthDialog(false)}>Cancel</Button>
+            <Button
+              onClick={handleRequestCode}
+              variant="contained"
+              disabled={loading}
+              startIcon={loading ? <CircularProgress size={20} /> : <LockIcon />}
+            >
+              {loading ? "Sending..." : "Continue"}
+            </Button>
+          </DialogActions>
+        </Dialog>
+      );
+    }
 
-              {successMessage && (
-                <Alert severity="success" sx={{ mb: 2 }}>
-                  {successMessage}
-                </Alert>
-              )}
+    // Code verification step
+    if (authStep === "code") {
+      return (
+        <Dialog open={showAuthDialog} onClose={() => setShowAuthDialog(false)} maxWidth="sm" fullWidth>
+          <DialogTitle>
+            <Box sx={{ textAlign: "center" }}>
+              <Avatar
+                sx={{
+                  width: 64,
+                  height: 64,
+                  mx: "auto",
+                  mb: 1,
+                  background: "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)",
+                }}
+              >
+                <LockIcon sx={{ fontSize: 32 }} />
+              </Avatar>
+              <Typography variant="h5" fontWeight="bold">
+                Enter Verification Code
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                We sent a 6-digit code to
+              </Typography>
+              <Chip label={email} sx={{ mt: 1 }} />
+            </Box>
+          </DialogTitle>
+          <DialogContent>
+            {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+            {successMessage && <Alert severity="success" sx={{ mb: 2 }}>{successMessage}</Alert>}
 
-              <form onSubmit={handleVerifyCode}>
-                <Stack spacing={2.5}>
-                  <TextField
-                    label="6-Digit Code"
-                    value={code}
-                    onChange={(e) =>
-                      setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
-                    }
-                    placeholder="000000"
-                    required
-                    fullWidth
-                    autoFocus
-                    inputProps={{
-                      maxLength: 6,
-                      style: {
-                        textAlign: "center",
-                        fontSize: "1.5rem",
-                        letterSpacing: "0.5rem",
-                      },
-                    }}
-                  />
+            <form onSubmit={handleVerifyCode}>
+              <TextField
+                label="6-Digit Code"
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="000000"
+                required
+                fullWidth
+                autoFocus
+                inputProps={{
+                  maxLength: 6,
+                  style: {
+                    textAlign: "center",
+                    fontSize: "1.5rem",
+                    letterSpacing: "0.5rem",
+                  },
+                }}
+                sx={{ mt: 2 }}
+              />
+            </form>
 
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    size="large"
-                    fullWidth
-                    disabled={loading || code.length !== 6}
-                    startIcon={loading ? <CircularProgress size={20} /> : null}
-                  >
-                    {loading ? "Verifying..." : "Verify & Login"}
-                  </Button>
+            <Alert severity="info" sx={{ mt: 2 }}>
+              <Typography variant="caption" fontWeight="bold">📧 DEV MODE:</Typography>
+              <Typography variant="caption" display="block">
+                Check the server logs for your verification code
+              </Typography>
+              <Typography variant="caption" display="block" sx={{ mt: 0.5, fontFamily: "monospace" }}>
+                docker compose logs visa-web --tail 20
+              </Typography>
+            </Alert>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3 }}>
+            <Button onClick={handleBackToEmail}>← Back to email</Button>
+            <Button
+              onClick={handleVerifyCode}
+              variant="contained"
+              disabled={loading || code.length !== 6}
+              startIcon={loading ? <CircularProgress size={20} /> : null}
+            >
+              {loading ? "Verifying..." : "Verify & Login"}
+            </Button>
+          </DialogActions>
+        </Dialog>
+      );
+    }
 
-                  <Button onClick={handleBackToEmail} variant="text" fullWidth>
-                    ← Back to email
-                  </Button>
-                </Stack>
-              </form>
+    return null;
+  };
 
-              <Alert severity="info" sx={{ mt: 3 }}>
-                <Typography variant="caption" fontWeight="bold">
-                  📧 DEV MODE:
-                </Typography>
-                <Typography variant="caption" display="block">
-                  Check the server logs for your verification code
-                </Typography>
-                <Typography
-                  variant="caption"
-                  display="block"
-                  sx={{ mt: 0.5, fontFamily: "monospace" }}
-                >
-                  docker compose logs visa-web --tail 20
-                </Typography>
-              </Alert>
-            </CardContent>
-          </Card>
+  // Close auth dialog on successful login
+  useEffect(() => {
+    if (authStep === "authenticated" && showAuthDialog) {
+      setShowAuthDialog(false);
+    }
+  }, [authStep, showAuthDialog]);
 
-          <IconButton
-            onClick={toggleDarkMode}
-            sx={{
-              position: "absolute",
-              top: 16,
-              right: 16,
-            }}
-          >
-            {darkMode ? <LightModeIcon /> : <DarkModeIcon />}
-          </IconButton>
-        </Box>
-      </ThemeProvider>
-    );
-  }
-
-  // Main application (authenticated)
+  // Main application (always shown, public or authenticated)
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -601,7 +563,7 @@ function App() {
               <GroupsIcon />
             </Avatar>
             <Typography variant="h6" component="div" fontWeight="bold">
-              Visa Community
+              H1B Visa Community
             </Typography>
 
             <Box sx={{ flexGrow: 1 }} />
@@ -617,9 +579,66 @@ function App() {
                 cursor: "pointer",
                 "&:hover": {
                   bgcolor: "primary.dark",
+                  animation: `${pulse} 0.5s ease-in-out`,
+                  transform: "scale(1.02)",
+                },
+                "& .MuiChip-icon": {
+                  "&:hover": {
+                    animation: `${pulse} 0.3s ease-in-out`,
+                  },
                 },
               }}
               onClick={() => setSelectedTopic(null)}
+            />
+
+            {/* AI News Button */}
+            <Chip
+              icon={<ArticleIcon />}
+              label="AI News"
+              color="secondary"
+              sx={{
+                fontWeight: 500,
+                mr: 2,
+                cursor: "pointer",
+                position: "relative",
+                overflow: "hidden",
+                background:
+                  "linear-gradient(90deg, #9c27b0 0%, #e91e63 50%, #9c27b0 100%)",
+                backgroundSize: "200% 100%",
+                animation: `${shimmer} 3s ease-in-out infinite`,
+                "&:hover": {
+                  bgcolor: "secondary.dark",
+                  animation: `${pulse} 1s ease-in-out infinite, ${glow} 1s ease-in-out infinite`,
+                  transform: "scale(1.05)",
+                },
+                "& .MuiChip-label": {
+                  background:
+                    "linear-gradient(90deg, #fff 0%, #f0f0f0 50%, #fff 100%)",
+                  backgroundSize: "200% 100%",
+                  backgroundClip: "text",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  animation: `${shimmer} 2.5s ease-in-out infinite`,
+                },
+                "& .MuiChip-icon": {
+                  animation: `${pulse} 2s ease-in-out infinite`,
+                  "&:hover": {
+                    animation: `${pulse} 0.5s ease-in-out infinite`,
+                  },
+                },
+                "&::before": {
+                  content: '""',
+                  position: "absolute",
+                  top: 0,
+                  left: "-100%",
+                  width: "100%",
+                  height: "100%",
+                  background:
+                    "linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent)",
+                  animation: `${shimmer} 2s ease-in-out infinite`,
+                },
+              }}
+              onClick={() => setActiveTab("news")}
             />
 
             {/* COMMENTED OUT: Tabs for Community Chat and AI Assistant - can be restored later */}
@@ -712,50 +731,32 @@ function App() {
         </AppBar>
 
         {/* Content */}
-        <Box sx={{ flexGrow: 1, overflow: "hidden" }}>
-          {userProfile && (
-            <>
-              {!selectedTopic ? (
-                <TopicsHome
-                  onTopicSelect={(topicId, topicName) => {
-                    setSelectedTopic({ id: topicId, name: topicName });
-                  }}
-                />
-              ) : (
-                <CommunityChat
-                  userEmail={userProfile.email}
-                  displayName={userProfile.displayName}
-                  onOnlineCountChange={setOnlineCount}
-                  roomId={selectedTopic.id}
-                  roomName={selectedTopic.name}
-                  onBackToTopics={() => setSelectedTopic(null)}
-                />
-              )}
-
-              {/* COMMENTED OUT: AI Assistant and Community Chat tabs - can be restored later */}
-              {/* 
-              {activeTab === "topics" && (
-                <TopicsHome
-                  onTopicSelect={(topicId, topicName) => {
-                    setSelectedTopic({ id: topicId, name: topicName });
-                    setActiveTab("community");
-                  }}
-                />
-              )}
-              {activeTab === "community" && (
-                <CommunityChat
-                  userEmail={userProfile.email}
-                  displayName={userProfile.displayName}
-                  onOnlineCountChange={setOnlineCount}
-                  roomId={selectedTopic?.id || "general"}
-                  roomName={selectedTopic?.name || "General Discussion"}
-                />
-              )}
-              {activeTab === "ai" && <AIAssistant />}
-              */}
-            </>
-          )}
+        <Box
+          sx={{
+            flexGrow: 1,
+            overflow: "auto",
+            WebkitOverflowScrolling: "touch",
+            minHeight: 0,
+          }}
+        >
+          {activeTab === "news" ? (
+            <AINews onBackToTopics={() => setActiveTab("topics")} />
+          ) : !selectedTopic ? (
+            <TopicsHome onTopicSelect={handleTopicSelect} />
+          ) : userProfile ? (
+            <CommunityChat
+              userEmail={userProfile.email}
+              displayName={userProfile.displayName}
+              onOnlineCountChange={setOnlineCount}
+              roomId={selectedTopic.id}
+              roomName={selectedTopic.name}
+              onBackToTopics={() => setSelectedTopic(null)}
+            />
+          ) : null}
         </Box>
+
+        {/* Auth Dialog */}
+        {renderAuthDialog()}
 
         {/* Profile Modal */}
         <Dialog

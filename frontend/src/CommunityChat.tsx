@@ -17,6 +17,10 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   Snackbar,
+  Drawer,
+  Badge,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import {
   Send as SendIcon,
@@ -28,6 +32,8 @@ import {
   ArrowBack as ArrowBackIcon,
   Edit as EditIcon,
   Check as CheckIcon,
+  Group as GroupIcon,
+  FormatListBulleted as ListIcon,
 } from "@mui/icons-material";
 
 interface ReplyToMessage {
@@ -73,6 +79,9 @@ export default function CommunityChat({
   roomName = "General Discussion",
   onBackToTopics,
 }: CommunityChatProps) {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
@@ -135,6 +144,9 @@ export default function CommunityChat({
   const previousDisplayNameRef = useRef<string>(displayName);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Mobile drawers visibility
+  const [openMembersDrawer, setOpenMembersDrawer] = useState(false);
+  const [openTopicsDrawer, setOpenTopicsDrawer] = useState(false);
 
   console.log("Connected as:", displayName, userEmail);
 
@@ -690,205 +702,207 @@ export default function CommunityChat({
     <Box
       sx={{ display: "flex", height: "100%", bgcolor: "background.default" }}
     >
-      {/* Online Users Sidebar - LEFT SIDE (Telegram Style) */}
-      <Paper
-        elevation={0}
-        sx={{
-          width: sidebarWidth,
-          minWidth: 200,
-          maxWidth: 500,
-          borderRight: 1,
-          borderColor: "divider",
-          display: "flex",
-          flexDirection: "column",
-          bgcolor: "background.paper",
-          position: "relative",
-          transition: isResizing ? "none" : "width 0.2s ease",
-        }}
-      >
-        {/* Sidebar Header */}
-        <Box
+      {/* Online Users Sidebar - LEFT SIDE (hidden on mobile, Drawer used) */}
+      {!isMobile && (
+        <Paper
+          elevation={0}
           sx={{
-            p: 2,
-            borderBottom: 1,
+            width: sidebarWidth,
+            minWidth: 200,
+            maxWidth: 500,
+            borderRight: 1,
             borderColor: "divider",
+            display: "flex",
+            flexDirection: "column",
+            bgcolor: "background.paper",
+            position: "relative",
+            transition: isResizing ? "none" : "width 0.2s ease",
           }}
         >
-          <Typography variant="subtitle1" fontWeight={600}>
-            Members
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {onlineUsers.length} online
-          </Typography>
-        </Box>
+          {/* Sidebar Header */}
+          <Box
+            sx={{
+              p: 2,
+              borderBottom: 1,
+              borderColor: "divider",
+            }}
+          >
+            <Typography variant="subtitle1" fontWeight={600}>
+              Members
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {onlineUsers.length} online
+            </Typography>
+          </Box>
 
-        {/* Users List */}
-        <List sx={{ flexGrow: 1, overflowY: "auto", p: 0 }}>
-          {onlineUsers.length === 0 ? (
-            <Box sx={{ p: 3, textAlign: "center" }}>
-              <Typography variant="body2" color="text.secondary">
-                No members online
-              </Typography>
-            </Box>
-          ) : (
-            onlineUsers.map((user, index) => {
-              const isCurrentUser = user.email === userEmail;
-              return (
-                <Box key={user.email}>
-                  <ListItem
-                    sx={{
-                      py: 1.5,
-                      px: 2,
-                      bgcolor: isCurrentUser
-                        ? "action.selected"
-                        : "transparent",
-                      "&:hover": {
-                        bgcolor: "action.hover",
-                      },
-                      cursor: "default",
-                    }}
-                  >
-                    <ListItemAvatar sx={{ minWidth: 48 }}>
-                      <Box sx={{ position: "relative" }}>
-                        <Avatar
-                          sx={{
-                            bgcolor: getAvatarColor(user.email),
-                            width: 40,
-                            height: 40,
-                            fontWeight: 500,
-                          }}
-                        >
-                          {user.displayName.charAt(0).toUpperCase()}
-                        </Avatar>
-                        <Box
-                          sx={{
-                            position: "absolute",
-                            bottom: 0,
-                            right: 0,
-                            width: 12,
-                            height: 12,
-                            borderRadius: "50%",
-                            bgcolor: "success.main",
-                            border: 2,
-                            borderColor: "background.paper",
-                          }}
-                        />
-                      </Box>
-                    </ListItemAvatar>
-                    <ListItemText
-                      primary={
-                        <Box
-                          sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 0.5,
-                          }}
-                        >
+          {/* Users List */}
+          <List sx={{ flexGrow: 1, overflowY: "auto", p: 0 }}>
+            {onlineUsers.length === 0 ? (
+              <Box sx={{ p: 3, textAlign: "center" }}>
+                <Typography variant="body2" color="text.secondary">
+                  No members online
+                </Typography>
+              </Box>
+            ) : (
+              onlineUsers.map((user, index) => {
+                const isCurrentUser = user.email === userEmail;
+                return (
+                  <Box key={user.email}>
+                    <ListItem
+                      sx={{
+                        py: 1.5,
+                        px: 2,
+                        bgcolor: isCurrentUser
+                          ? "action.selected"
+                          : "transparent",
+                        "&:hover": {
+                          bgcolor: "action.hover",
+                        },
+                        cursor: "default",
+                      }}
+                    >
+                      <ListItemAvatar sx={{ minWidth: 48 }}>
+                        <Box sx={{ position: "relative" }}>
+                          <Avatar
+                            sx={{
+                              bgcolor: getAvatarColor(user.email),
+                              width: 40,
+                              height: 40,
+                              fontWeight: 500,
+                            }}
+                          >
+                            {user.displayName.charAt(0).toUpperCase()}
+                          </Avatar>
+                          <Box
+                            sx={{
+                              position: "absolute",
+                              bottom: 0,
+                              right: 0,
+                              width: 12,
+                              height: 12,
+                              borderRadius: "50%",
+                              bgcolor: "success.main",
+                              border: 2,
+                              borderColor: "background.paper",
+                            }}
+                          />
+                        </Box>
+                      </ListItemAvatar>
+                      <ListItemText
+                        primary={
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 0.5,
+                            }}
+                          >
+                            <Typography
+                              variant="body2"
+                              fontWeight={isCurrentUser ? 600 : 500}
+                              sx={{
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {user.displayName}
+                            </Typography>
+                            {isCurrentUser && (
+                              <Typography
+                                variant="caption"
+                                color="primary"
+                                sx={{ fontWeight: 500 }}
+                              >
+                                (You)
+                              </Typography>
+                            )}
+                          </Box>
+                        }
+                        secondary={
                           <Typography
-                            variant="body2"
-                            fontWeight={isCurrentUser ? 600 : 500}
+                            variant="caption"
+                            color="text.secondary"
                             sx={{
                               overflow: "hidden",
                               textOverflow: "ellipsis",
                               whiteSpace: "nowrap",
+                              display: "block",
                             }}
                           >
-                            {user.displayName}
+                            {user.email}
                           </Typography>
-                          {isCurrentUser && (
-                            <Typography
-                              variant="caption"
-                              color="primary"
-                              sx={{ fontWeight: 500 }}
-                            >
-                              (You)
-                            </Typography>
-                          )}
-                        </Box>
-                      }
-                      secondary={
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                            display: "block",
-                          }}
-                        >
-                          {user.email}
-                        </Typography>
-                      }
-                    />
-                  </ListItem>
-                  {index < onlineUsers.length - 1 && (
-                    <Divider variant="inset" component="li" />
-                  )}
-                </Box>
-              );
-            })
-          )}
-        </List>
+                        }
+                      />
+                    </ListItem>
+                    {index < onlineUsers.length - 1 && (
+                      <Divider variant="inset" component="li" />
+                    )}
+                  </Box>
+                );
+              })
+            )}
+          </List>
 
-        {/* Footer Info */}
-        <Box
-          sx={{
-            p: 2,
-            borderTop: 1,
-            borderColor: "divider",
-            bgcolor: "action.hover",
-          }}
-        >
-          <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
-            <InfoIcon fontSize="small" color="info" sx={{ mt: 0.25 }} />
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ lineHeight: 1.4 }}
-            >
-              Real-time messaging. All messages are visible to online members.
-            </Typography>
-          </Box>
-        </Box>
-
-        {/* Resize Handle */}
-        <Box
-          onMouseDown={handleMouseDown}
-          onDoubleClick={handleDoubleClickDivider}
-          sx={{
-            position: "absolute",
-            top: 0,
-            right: -4,
-            width: 8,
-            height: "100%",
-            cursor: "col-resize",
-            zIndex: 10,
-            transition: "background-color 0.2s",
-            "&:hover": {
-              bgcolor: "primary.main",
-            },
-            "&:active": {
-              bgcolor: "primary.dark",
-            },
-          }}
-        >
-          {/* Visual indicator on hover */}
+          {/* Footer Info */}
           <Box
             sx={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              width: 4,
-              height: 40,
-              borderRadius: 2,
-              bgcolor: isResizing ? "primary.main" : "transparent",
-              transition: "background-color 0.2s",
+              p: 2,
+              borderTop: 1,
+              borderColor: "divider",
+              bgcolor: "action.hover",
             }}
-          />
-        </Box>
-      </Paper>
+          >
+            <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
+              <InfoIcon fontSize="small" color="info" sx={{ mt: 0.25 }} />
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ lineHeight: 1.4 }}
+              >
+                Real-time messaging. All messages are visible to online members.
+              </Typography>
+            </Box>
+          </Box>
+
+          {/* Resize Handle */}
+          <Box
+            onMouseDown={handleMouseDown}
+            onDoubleClick={handleDoubleClickDivider}
+            sx={{
+              position: "absolute",
+              top: 0,
+              right: -4,
+              width: 8,
+              height: "100%",
+              cursor: "col-resize",
+              zIndex: 10,
+              transition: "background-color 0.2s",
+              "&:hover": {
+                bgcolor: "primary.main",
+              },
+              "&:active": {
+                bgcolor: "primary.dark",
+              },
+            }}
+          >
+            {/* Visual indicator on hover */}
+            <Box
+              sx={{
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+                width: 4,
+                height: 40,
+                borderRadius: 0,
+                bgcolor: isResizing ? "primary.main" : "transparent",
+                transition: "background-color 0.2s",
+              }}
+            />
+          </Box>
+        </Paper>
+      )}
 
       {/* Main Chat Area - CENTER */}
       <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }}>
@@ -903,6 +917,18 @@ export default function CommunityChat({
           }}
         >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+            {isMobile && (
+              <>
+                <IconButton onClick={() => setOpenMembersDrawer(true)}>
+                  <Badge color="primary" badgeContent={onlineUsers.length}>
+                    <GroupIcon />
+                  </Badge>
+                </IconButton>
+                <IconButton onClick={() => setOpenTopicsDrawer(true)}>
+                  <ListIcon />
+                </IconButton>
+              </>
+            )}
             {onBackToTopics && (
               <IconButton
                 onClick={onBackToTopics}
@@ -966,6 +992,9 @@ export default function CommunityChat({
             flexGrow: 1,
             overflowY: "auto",
             overflowX: "hidden",
+            WebkitOverflowScrolling: "touch",
+            overscrollBehavior: "contain",
+            scrollBehavior: "smooth",
             px: 3,
             py: 2,
             bgcolor: "background.default",
@@ -1020,7 +1049,7 @@ export default function CommunityChat({
                     sx={{
                       mb: 3,
                       p: 2,
-                      borderRadius: 2,
+                      borderRadius: 0,
                       bgcolor:
                         topicType === "question"
                           ? "rgba(251, 191, 36, 0.1)"
@@ -1043,7 +1072,7 @@ export default function CommunityChat({
                         sx={{
                           px: 1.5,
                           py: 0.5,
-                          borderRadius: 1,
+                          borderRadius: 0,
                           bgcolor:
                             topicType === "question"
                               ? "warning.main"
@@ -1170,7 +1199,7 @@ export default function CommunityChat({
                           p: 3,
                           textAlign: "center",
                           bgcolor: "action.hover",
-                          borderRadius: 2,
+                          borderRadius: 0,
                           border: 1,
                           borderColor: "divider",
                           borderStyle: "dashed",
@@ -1257,7 +1286,7 @@ export default function CommunityChat({
                                   px: 1.5,
                                   py: 1,
                                   bgcolor: "transparent",
-                                  borderRadius: 1,
+                                  borderRadius: 0,
                                   position: "relative",
                                 }}
                               >
@@ -1266,7 +1295,7 @@ export default function CommunityChat({
                                     sx={{
                                       mb: msg.message ? 1 : 0,
                                       maxWidth: "400px",
-                                      borderRadius: 2,
+                                      borderRadius: 0,
                                       overflow: "hidden",
                                       cursor: "pointer",
                                       border: 1,
@@ -1413,7 +1442,7 @@ export default function CommunityChat({
                       p: 2,
                       border: 1,
                       borderColor: "divider",
-                      borderRadius: 2,
+                      borderRadius: 0,
                       cursor: "pointer",
                       transition: "all 0.2s ease",
                       "&:hover": {
@@ -1454,7 +1483,7 @@ export default function CommunityChat({
                             sx={{
                               px: 1,
                               py: 0.25,
-                              borderRadius: 1,
+                              borderRadius: 0,
                               bgcolor:
                                 topicType === "question"
                                   ? "warning.main"
@@ -1624,6 +1653,7 @@ export default function CommunityChat({
             borderTop: 1,
             borderColor: "divider",
             bgcolor: "background.paper",
+            pb: "calc(16px + env(safe-area-inset-bottom))",
           }}
         >
           <Box sx={{ display: "flex", gap: 1, alignItems: "flex-end" }}>
@@ -1725,159 +1755,319 @@ export default function CommunityChat({
         </Paper>
       </Box>
 
-      {/* Topics Panel - RIGHT SIDE */}
-      <Paper
-        elevation={0}
-        sx={{
-          width: questionsWidth,
-          minWidth: 240,
-          maxWidth: 500,
-          borderLeft: 1,
-          borderColor: "divider",
-          display: "flex",
-          flexDirection: "column",
-          bgcolor: "background.paper",
-          position: "relative",
-          flexShrink: 0,
-          transition: isResizingQuestions ? "none" : "width 0.2s ease",
-        }}
-      >
-        <Box
+      {/* Topics Panel - RIGHT SIDE (hidden on mobile, Drawer used) */}
+      {!isMobile && (
+        <Paper
+          elevation={0}
           sx={{
-            p: 2,
-            borderBottom: 1,
+            width: questionsWidth,
+            minWidth: 240,
+            maxWidth: 500,
+            borderLeft: 1,
             borderColor: "divider",
-          }}
-        >
-          <Typography variant="subtitle1" fontWeight={600}>
-            Topics
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {sortedTopicIds.length} total
-          </Typography>
-        </Box>
-
-        <List sx={{ flexGrow: 1, overflowY: "auto", p: 0 }}>
-          {sortedTopicIds.length === 0 ? (
-            <Box sx={{ p: 3, textAlign: "center" }}>
-              <Typography variant="body2" color="text.secondary">
-                No topics yet
-              </Typography>
-            </Box>
-          ) : (
-            sortedTopicIds.map((tid, i) => {
-              const thread = (topicThreads as any)[tid] as Message[];
-              const q = thread[0];
-              const key = q.id ?? i;
-              const tType = getMessageType(q);
-              return (
-                <ListItem key={key} disablePadding>
-                  <ListItemButton
-                    onClick={() => {
-                      setSelectedTopicId(q.id ?? tid);
-                    }}
-                    sx={{ alignItems: "flex-start", py: 1.25 }}
-                  >
-                    <ListItemAvatar>
-                      <Avatar
-                        sx={{
-                          bgcolor: getAvatarColor(q.userEmail),
-                          width: 32,
-                          height: 32,
-                        }}
-                      >
-                        {q.displayName.charAt(0).toUpperCase()}
-                      </Avatar>
-                    </ListItemAvatar>
-                    <ListItemText
-                      primary={
-                        <Box
-                          sx={{ display: "flex", alignItems: "center", gap: 1 }}
-                        >
-                          <Typography
-                            variant="caption"
-                            sx={{
-                              px: 0.75,
-                              py: 0.25,
-                              borderRadius: 1,
-                              bgcolor:
-                                tType === "question"
-                                  ? "warning.main"
-                                  : "info.main",
-                              color:
-                                tType === "question"
-                                  ? "warning.contrastText"
-                                  : "info.contrastText",
-                              fontWeight: 700,
-                              letterSpacing: 0.5,
-                            }}
-                          >
-                            {tType === "question" ? "Q" : "Info"}
-                          </Typography>
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              fontWeight: 700,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                              flex: 1,
-                            }}
-                          >
-                            {q.message}
-                          </Typography>
-                        </Box>
-                      }
-                      secondary={
-                        <Typography variant="caption" color="text.secondary">
-                          {thread.length - 1} repl
-                          {thread.length - 1 === 1 ? "y" : "ies"} •{" "}
-                          {q.displayName} • {formatTime(q.timestamp)}
-                        </Typography>
-                      }
-                    />
-                  </ListItemButton>
-                </ListItem>
-              );
-            })
-          )}
-        </List>
-
-        {/* Resize Handle (left edge of panel) */}
-        <Box
-          onMouseDown={handleMouseDownQuestions}
-          sx={{
-            position: "absolute",
-            top: 0,
-            left: -4,
-            width: 8,
-            height: "100%",
-            cursor: "col-resize",
-            zIndex: 10,
-            transition: "background-color 0.2s",
-            "&:hover": {
-              bgcolor: "primary.main",
-            },
-            "&:active": {
-              bgcolor: "primary.dark",
-            },
+            display: "flex",
+            flexDirection: "column",
+            bgcolor: "background.paper",
+            position: "relative",
+            flexShrink: 0,
+            transition: isResizingQuestions ? "none" : "width 0.2s ease",
           }}
         >
           <Box
             sx={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              width: 4,
-              height: 40,
-              borderRadius: 2,
-              bgcolor: isResizingQuestions ? "primary.main" : "transparent",
-              transition: "background-color 0.2s",
+              p: 2,
+              borderBottom: 1,
+              borderColor: "divider",
             }}
-          />
-        </Box>
-      </Paper>
+          >
+            <Typography variant="subtitle1" fontWeight={600}>
+              Topics
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {sortedTopicIds.length} total
+            </Typography>
+          </Box>
+
+          <List sx={{ flexGrow: 1, overflowY: "auto", p: 0 }}>
+            {sortedTopicIds.length === 0 ? (
+              <Box sx={{ p: 3, textAlign: "center" }}>
+                <Typography variant="body2" color="text.secondary">
+                  No topics yet
+                </Typography>
+              </Box>
+            ) : (
+              sortedTopicIds.map((tid, i) => {
+                const thread = (topicThreads as any)[tid] as Message[];
+                const q = thread[0];
+                const key = q.id ?? i;
+                const tType = getMessageType(q);
+                return (
+                  <ListItem key={key} disablePadding>
+                    <ListItemButton
+                      onClick={() => {
+                        setSelectedTopicId(q.id ?? tid);
+                      }}
+                      sx={{ alignItems: "flex-start", py: 1.25 }}
+                    >
+                      <ListItemAvatar>
+                        <Avatar
+                          sx={{
+                            bgcolor: getAvatarColor(q.userEmail),
+                            width: 32,
+                            height: 32,
+                          }}
+                        >
+                          {q.displayName.charAt(0).toUpperCase()}
+                        </Avatar>
+                      </ListItemAvatar>
+                      <ListItemText
+                        primary={
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1,
+                            }}
+                          >
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                px: 0.75,
+                                py: 0.25,
+                                borderRadius: 1,
+                                bgcolor:
+                                  tType === "question"
+                                    ? "warning.main"
+                                    : "info.main",
+                                color:
+                                  tType === "question"
+                                    ? "warning.contrastText"
+                                    : "info.contrastText",
+                                fontWeight: 700,
+                                letterSpacing: 0.5,
+                              }}
+                            >
+                              {tType === "question" ? "Q" : "Info"}
+                            </Typography>
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                fontWeight: 700,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                flex: 1,
+                              }}
+                            >
+                              {q.message}
+                            </Typography>
+                          </Box>
+                        }
+                        secondary={
+                          <Typography variant="caption" color="text.secondary">
+                            {thread.length - 1} repl
+                            {thread.length - 1 === 1 ? "y" : "ies"} •{" "}
+                            {q.displayName} • {formatTime(q.timestamp)}
+                          </Typography>
+                        }
+                      />
+                    </ListItemButton>
+                  </ListItem>
+                );
+              })
+            )}
+          </List>
+
+          {/* Resize Handle (left edge of panel) */}
+          <Box
+            onMouseDown={handleMouseDownQuestions}
+            sx={{
+              position: "absolute",
+              top: 0,
+              left: -4,
+              width: 8,
+              height: "100%",
+              cursor: "col-resize",
+              zIndex: 10,
+              transition: "background-color 0.2s",
+              "&:hover": {
+                bgcolor: "primary.main",
+              },
+              "&:active": {
+                bgcolor: "primary.dark",
+              },
+            }}
+          >
+            <Box
+              sx={{
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+                width: 4,
+                height: 40,
+                borderRadius: 2,
+                bgcolor: isResizingQuestions ? "primary.main" : "transparent",
+                transition: "background-color 0.2s",
+              }}
+            />
+          </Box>
+        </Paper>
+      )}
+
+      {/* Mobile Drawers */}
+      {isMobile && (
+        <>
+          <Drawer
+            open={openMembersDrawer}
+            onClose={() => setOpenMembersDrawer(false)}
+            PaperProps={{
+              sx: { width: Math.min(320, window.innerWidth - 56) },
+            }}
+          >
+            <Box
+              sx={{
+                width: 1,
+                height: 1,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              {/* Reuse Members sidebar content */}
+              {/* We embed a minimal version: */}
+              <Box sx={{ p: 2, borderBottom: 1, borderColor: "divider" }}>
+                <Typography variant="subtitle1" fontWeight={600}>
+                  Members
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {onlineUsers.length} online
+                </Typography>
+              </Box>
+              <List sx={{ flexGrow: 1, overflowY: "auto", p: 0 }}>
+                {onlineUsers.map((user) => (
+                  <ListItem key={user.email}>
+                    <ListItemAvatar>
+                      <Avatar sx={{ bgcolor: getAvatarColor(user.email) }}>
+                        {user.displayName.charAt(0).toUpperCase()}
+                      </Avatar>
+                    </ListItemAvatar>
+                    <ListItemText
+                      primary={user.displayName}
+                      secondary={user.email}
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </Box>
+          </Drawer>
+          <Drawer
+            anchor="right"
+            open={openTopicsDrawer}
+            onClose={() => setOpenTopicsDrawer(false)}
+            PaperProps={{
+              sx: { width: Math.min(360, window.innerWidth - 56) },
+            }}
+          >
+            <Box
+              sx={{
+                width: 1,
+                height: 1,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <Box sx={{ p: 2, borderBottom: 1, borderColor: "divider" }}>
+                <Typography variant="subtitle1" fontWeight={600}>
+                  Topics
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {sortedTopicIds.length} total
+                </Typography>
+              </Box>
+              <List sx={{ flexGrow: 1, overflowY: "auto", p: 0 }}>
+                {sortedTopicIds.map((tid, i) => {
+                  const thread = (topicThreads as any)[tid] as Message[];
+                  const q = thread[0];
+                  const key = q.id ?? i;
+                  const tType = getMessageType(q);
+                  return (
+                    <ListItem key={key} disablePadding>
+                      <ListItemButton
+                        onClick={() => {
+                          setSelectedTopicId(q.id ?? tid);
+                          setOpenTopicsDrawer(false);
+                        }}
+                        sx={{ alignItems: "flex-start", py: 1.25 }}
+                      >
+                        <ListItemAvatar>
+                          <Avatar sx={{ bgcolor: getAvatarColor(q.userEmail) }}>
+                            {q.displayName.charAt(0).toUpperCase()}
+                          </Avatar>
+                        </ListItemAvatar>
+                        <ListItemText
+                          primary={
+                            <Box
+                              sx={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 1,
+                              }}
+                            >
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  px: 0.75,
+                                  py: 0.25,
+                                  borderRadius: 1,
+                                  bgcolor:
+                                    tType === "question"
+                                      ? "warning.main"
+                                      : "info.main",
+                                  color:
+                                    tType === "question"
+                                      ? "warning.contrastText"
+                                      : "info.contrastText",
+                                  fontWeight: 700,
+                                  letterSpacing: 0.5,
+                                }}
+                              >
+                                {" "}
+                                {tType === "question" ? "Q" : "Info"}{" "}
+                              </Typography>
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  fontWeight: 700,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                  flex: 1,
+                                }}
+                              >
+                                {q.message}
+                              </Typography>
+                            </Box>
+                          }
+                          secondary={
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              {thread.length - 1} repl
+                              {thread.length - 1 === 1 ? "y" : "ies"} •{" "}
+                              {q.displayName} • {formatTime(q.timestamp)}
+                            </Typography>
+                          }
+                        />
+                      </ListItemButton>
+                    </ListItem>
+                  );
+                })}
+              </List>
+            </Box>
+          </Drawer>
+        </>
+      )}
 
       {/* Snackbar for error/success messages */}
       <Snackbar
