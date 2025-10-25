@@ -183,14 +183,20 @@ class MongoDBConnection:
         except ConnectionFailure as e:
             logger.error(f"❌ MongoDB connection failed: {e}")
             logger.error("   Check your connection string, certificates, and network access")
-            raise
+            logger.warning("⚠️  Continuing without MongoDB (some features may be limited)")
+            self.client = None
+            self.db = None
         except ConfigurationError as e:
             logger.error(f"❌ MongoDB configuration error: {e}")
             logger.error("   Check your environment variables and certificate paths")
-            raise
+            logger.warning("⚠️  Continuing without MongoDB (some features may be limited)")
+            self.client = None
+            self.db = None
         except Exception as e:
             logger.error(f"❌ Unexpected MongoDB error: {e}")
-            raise
+            logger.warning("⚠️  Continuing without MongoDB (some features may be limited)")
+            self.client = None
+            self.db = None
     
     def get_collection(self, collection_name: str):
         """Get a MongoDB collection"""

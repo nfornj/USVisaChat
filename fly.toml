@@ -29,7 +29,7 @@ primary_region = 'iad'  # IAD (Ashburn, VA) - current region
   QDRANT_PORT = '6333'
   
   # CORS Configuration
-  ALLOWED_ORIGINS = 'https://visa-community.fly.dev'  # Update with your domain
+  ALLOWED_ORIGINS = 'https://usvisachat.fly.dev'  # Your actual domain
 
 [http_service]
   internal_port = 8000
@@ -41,15 +41,15 @@ primary_region = 'iad'  # IAD (Ashburn, VA) - current region
 
   # Health checks
   [[http_service.checks]]
-    grace_period = '10s'
-    interval = '15s'
+    grace_period = '60s'  # Give app time to load numpy/torch
+    interval = '30s'
     method = 'GET'
     path = '/health'
-    timeout = '5s'
+    timeout = '10s'
     type = 'http'
 
 [[vm]]
-  memory = '1gb'
+  memory = '2gb'  # Increased for numpy/torch dependencies
   cpu_kind = 'shared'
   cpus = 1
 
