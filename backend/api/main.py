@@ -4,6 +4,7 @@ Modular FastAPI application with clean separation of concerns
 """
 
 import logging
+import os
 from pathlib import Path
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
@@ -40,8 +41,6 @@ app = FastAPI(
 )
 
 # Add CORS middleware (secure configuration)
-import os
-
 # Get allowed origins from environment (comma-separated)
 allowed_origins_str = os.getenv(
     "ALLOWED_ORIGINS",
