@@ -108,6 +108,19 @@ async def startup_event():
         raise
 
 
+# Health check endpoint (required for Fly.io)
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for load balancers and monitoring"""
+    return {
+        "status": "healthy",
+        "version": "2.0.0",
+        "services": {
+            "api": "running"
+        }
+    }
+
+
 # Register routers
 app.include_router(auth_router)
 app.include_router(chat_router)

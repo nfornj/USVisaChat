@@ -4,11 +4,12 @@ version = "1.0.0"
 description = "Telegram visa conversation vector processing and search system"
 requires-python = ">=3.11"
 dependencies = [
-    # Core Telegram and data processing
-    "telethon>=1.36.0",
+    # Core dependencies
     "python-dotenv>=1.0.0",
     "aiofiles>=23.2.1",
     "python-dateutil>=2.8.2",
+    # Telegram (only needed for data collection, not production)
+    # "telethon>=1.36.0",
     # Data science core
     "pandas>=2.1.0",
     "numpy>=1.24.0",
