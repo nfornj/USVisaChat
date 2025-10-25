@@ -106,3 +106,4 @@ docker-compose.override.yml
 *.safetensors
 *.gguf
 
+*.sh

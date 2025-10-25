@@ -51,8 +51,8 @@ RUN mkdir -p .session data/conversations/raw data/embeddings exports certificate
 RUN chmod -R 755 data exports .session certificates
 
 # Create a non-root user for security
-RUN useradd -m -u 1000 telegram && chown -R telegram:telegram /app
-USER telegram
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
 
 # Expose port for web access
 EXPOSE 8000
