@@ -7,6 +7,113 @@
 
 ## 🔧 Latest Changes
 
+### October 24, 2025 - Inter Font, Purple Community Theme & Dark Mode Fix ✅
+
+**What changed**
+
+- Integrated **Inter font** (Google Fonts) to improve readability in both light and dark modes
+- **Purple Community Theme**: Vibrant, creative, premium color scheme perfect for community platforms
+- Enhanced dark mode text contrast: changed primary text color from `#f1f5f9` to `#f8fafc` for better visibility
+- **Fixed AINews component dark mode**: Removed all hardcoded light colors, now respects theme
+- Added preconnect links to Google Fonts for optimal performance
+- Loaded Inter font with weights 300-800 for comprehensive typography hierarchy
+- Updated theme.ts to prioritize Inter font in the font family stack
+
+**Purple Community Theme**
+
+**Light Mode:**
+- **Primary**: Vibrant purple (`#7c3aed`) - Creative, premium, community-focused
+- **Secondary**: Pink accent (`#ec4899`) - Warm, welcoming for important actions/buttons
+- **Background**: Very light purple tint (`#faf5ff`) - Subtle brand presence
+- **Text**: Deep indigo (`#1e1b4b`) with neutral gray secondary (`#6b7280`)
+- **Success**: Emerald green (`#10b981`) - Positive outcomes
+- **Info**: Purple info (`#8b5cf6`) - Consistent with brand
+
+**Dark Mode:**
+- **Primary**: Lighter purple (`#a78bfa`) - Softer for dark backgrounds
+- **Secondary**: Lighter pink (`#f472b6`) - Maintains warmth in dark mode
+- **Background**: Dark navy (`#0f172a`) and dark slate (`#1e293b`)
+- **Text**: Bright white (`#f8fafc`) for maximum readability
+
+**Why Purple:**
+- ✅ Community-focused and welcoming
+- ✅ Creative and modern aesthetic
+- ✅ Premium feel for valuable content
+- ✅ Less common than blue (stands out)
+- ✅ Pink accents add warmth and approachability
+
+**Why Inter Font**
+
+- ✅ **Excellent Readability**: Specifically designed for UI/screens
+- ✅ **Open Source**: Free to use, no licensing concerns
+- ✅ **Similar to Zalando Sans**: Professional, clean, modern aesthetic (requested by user)
+- ✅ **Better Dark Mode**: Higher contrast and clearer characters
+- ✅ **Variable Weights**: 300-800 weight range for typography hierarchy
+- ✅ **Wide Language Support**: Supports multiple character sets
+
+**Dark Mode Bug Fix**
+
+- Issue: AINews component had hardcoded light colors (`#f8f9fa`, `white`, `#1a1a1a`) that ignored theme
+- Fixed: Replaced all hardcoded colors with theme tokens:
+  - `bgcolor: "#f8f9fa"` → `bgcolor: "background.default"`
+  - `bgcolor: "white"` → `bgcolor: "background.paper"`
+  - `color: "#1a1a1a"` → `color: "text.primary"`
+  - `borderColor: "rgba(0,0,0,0.08)"` → `borderColor: "divider"`
+- Result: AINews now properly displays dark background with bright white text in dark mode
+
+**Header Design - Glass Morphism with Subtle Shine**
+
+- **Header background**: Solid purple (`#7c3aed`) matching primary theme
+- **Topics button (active)**: Frosted glass effect with subtle white glow and gentle shine animation
+  - Background: `rgba(255, 255, 255, 0.15)` with backdrop blur
+  - Animation: Gentle opacity pulse (1 → 0.85 → 1) every 2 seconds
+  - Glow: Soft white shadow for focus effect
+  - Not too bright, elegant and professional
+- **AI News button (active)**: Frosted glass with pink tint and same shine animation
+  - Background: `rgba(236, 72, 153, 0.25)` with backdrop blur
+  - Pink glow matches secondary theme
+- **Inactive buttons**: Semi-transparent white with subtle hover effect
+- **Logo avatar**: Purple to pink gradient (`#7c3aed` → `#ec4899`)
+- All buttons have smooth 0.3s transitions
+
+**Files Modified**
+
+- `frontend/index.html` — Added Google Fonts preconnect and Inter font import
+- `frontend/src/theme.ts` — Updated to purple community theme with pink accents
+- `frontend/src/components/AINews.tsx` — Removed hardcoded colors, now uses theme tokens
+- `frontend/src/layouts/Header.tsx` — Updated button colors to match purple theme
+
+**Technical Details**
+
+- Font loaded via Google Fonts CDN with `display=swap` for optimal performance
+- Weights loaded: 300 (Light), 400 (Regular), 500 (Medium), 600 (Semi-bold), 700 (Bold), 800 (Extra-bold)
+- Dark mode primary text: `#f8fafc` (improved from `#f1f5f9`)
+- Preconnect used for early DNS resolution and connection establishment
+
+**Alternative: Self-Hosted Font**
+
+If you prefer self-hosting for better performance:
+1. Download Inter from [https://rsms.me/inter/](https://rsms.me/inter/)
+2. Place font files in `frontend/public/fonts/`
+3. Update CSS with `@font-face` declarations
+
+**Using Zalando Sans (If Available)**
+
+If you have access to Zalando Sans font files:
+1. Obtain `.woff2` font files
+2. Place in `frontend/public/fonts/zalando-sans/`
+3. Add `@font-face` declarations in CSS
+4. Update theme.ts to prioritize Zalando Sans before Inter
+
+**Build Status**
+
+- ✅ Build successful with 13,299 modules transformed
+- ✅ Font loading optimized with preconnect and display=swap
+- ✅ Improved readability in dark mode
+- ✅ Consistent typography across all platforms
+
+---
+
 ### October 23, 2025 - AI News UI Redesign ✅
 
 **What changed**

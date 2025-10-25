@@ -101,7 +101,7 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
   };
 
   return (
-    <Box sx={{ bgcolor: "#f8f9fa", minHeight: "100vh", py: 4 }}>
+    <Box sx={{ bgcolor: "background.default", minHeight: "100vh", py: 4 }}>
       <Container maxWidth="lg">
         {/* Clean Header */}
         <Box sx={{ mb: 5 }}>
@@ -126,7 +126,7 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
               fontWeight="700"
               sx={{
                 mb: 1,
-                color: "#1a1a1a",
+                color: "text.primary",
                 fontSize: { xs: "2rem", md: "2.5rem" },
                 letterSpacing: "-0.02em",
               }}
@@ -150,14 +150,14 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
                 icon={<AutoAwesomeIcon sx={{ fontSize: 14 }} />}
                 label="AI-Curated"
                 size="small"
-                sx={{ bgcolor: "white", fontWeight: 500 }}
+                sx={{ bgcolor: "background.paper", fontWeight: 500 }}
               />
               {lastUpdated && (
                 <Chip
                   icon={<ScheduleIcon sx={{ fontSize: 14 }} />}
                   label={`Updated ${getTimeAgo(lastUpdated.toISOString())}`}
                   size="small"
-                  sx={{ bgcolor: "white", fontWeight: 500 }}
+                  sx={{ bgcolor: "background.paper", fontWeight: 500 }}
                 />
               )}
               <IconButton
@@ -215,7 +215,7 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
                   <Card
                     elevation={0}
                     sx={{
-                      bgcolor: "white",
+                      bgcolor: "background.paper",
                       borderRadius: 4,
                       overflow: "hidden",
                       transition: "all 0.3s ease",
@@ -223,9 +223,11 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
                       display: "flex",
                       flexDirection: "column",
                       border: "1px solid",
-                      borderColor: "rgba(0,0,0,0.08)",
+                      borderColor: "divider",
                       "&:hover": {
-                        boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+                        boxShadow: (theme) => theme.palette.mode === 'dark' 
+                          ? "0 8px 24px rgba(0,0,0,0.4)"
+                          : "0 8px 24px rgba(0,0,0,0.12)",
                         transform: "translateY(-4px)",
                       },
                     }}
@@ -255,7 +257,7 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
                             mb: 2,
                             fontSize: "1.4rem",
                             lineHeight: 1.4,
-                            color: "#1a1a1a",
+                            color: "text.primary",
                             fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
                             letterSpacing: "-0.01em",
                           }}
@@ -286,7 +288,7 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
                             label={article.source}
                             size="small"
                             sx={{
-                              bgcolor: "#f0f0f0",
+                              bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#f0f0f0',
                               color: "text.secondary",
                               fontWeight: 500,
                               fontSize: "0.75rem",
@@ -329,7 +331,7 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
         {!loading && articles.length === 0 && !error && (
           <Box
             sx={{
-              bgcolor: "white",
+              bgcolor: "background.paper",
               textAlign: "center",
               py: 8,
               px: 3,
