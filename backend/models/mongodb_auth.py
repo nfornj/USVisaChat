@@ -77,11 +77,24 @@ class MongoDBAuthDatabase:
                     'email': email,
                     'display_name': display_name,
                     'is_verified': False,
+                    'role': 'user',  # 'user', 'moderator', 'admin'
                     'profile': {
                         'avatar_url': None,
                         'bio': None,
                         'timezone': 'UTC'
                     },
+                    # User statistics (denormalized for performance)
+                    'stats': {
+                        'message_count': 0,
+                        'last_active': datetime.now(timezone.utc),
+                        'total_reactions': 0,
+                        'reactions_given': 0
+                    },
+                    # Moderation fields
+                    'banned': False,
+                    'ban_expires_at': None,
+                    'ban_reason': None,
+                    # Timestamps
                     'created_at': datetime.now(timezone.utc),
                     'updated_at': datetime.now(timezone.utc),
                     'last_login_at': None
@@ -432,6 +445,94 @@ class MongoDBAuthDatabase:
             logger.error(f"❌ Error updating user profile: {e}")
             return None
     
+    def increment_user_message_count(self, user_email: str):
+        """Increment user's message count and update last_active"""
+        try:
+            self.users.update_one(
+                {'email': user_email.lower().strip()},
+                {
+                    '$inc': {'stats.message_count': 1},
+                    '$set': {'stats.last_active': datetime.now(timezone.utc)}
+                }
+            )
+        except Exception as e:
+            logger.error(f"❌ Error updating user stats: {e}")
+    
+    def ban_user(self, user_email: str, duration_days: int = None, reason: str = None) -> bool:
+        """Ban a user (permanently or temporarily)"""
+        try:
+            update_data = {
+                'banned': True,
+                'ban_reason': reason,
+                'updated_at': datetime.now(timezone.utc)
+            }
+            
+            if duration_days:
+                ban_expires = datetime.now(timezone.utc) + timedelta(days=duration_days)
+                update_data['ban_expires_at'] = ban_expires
+            else:
+                update_data['ban_expires_at'] = None  # Permanent ban
+            
+            result = self.users.update_one(
+                {'email': user_email.lower().strip()},
+                {'$set': update_data}
+            )
+            
+            if result.modified_count > 0:
+                logger.info(f"✅ User {user_email} banned")
+                return True
+            return False
+            
+        except Exception as e:
+            logger.error(f"❌ Error banning user: {e}")
+            return False
+    
+    def unban_user(self, user_email: str) -> bool:
+        """Unban a user"""
+        try:
+            result = self.users.update_one(
+                {'email': user_email.lower().strip()},
+                {
+                    '$set': {
+                        'banned': False,
+                        'ban_expires_at': None,
+                        'ban_reason': None,
+                        'updated_at': datetime.now(timezone.utc)
+                    }
+                }
+            )
+            
+            if result.modified_count > 0:
+                logger.info(f"✅ User {user_email} unbanned")
+                return True
+            return False
+            
+        except Exception as e:
+            logger.error(f"❌ Error unbanning user: {e}")
+            return False
+    
+    def is_user_banned(self, user_email: str) -> bool:
+        """Check if user is currently banned"""
+        try:
+            user = self.users.find_one({'email': user_email.lower().strip()})
+            
+            if not user or not user.get('banned'):
+                return False
+            
+            # Check if temporary ban has expired
+            ban_expires = user.get('ban_expires_at')
+            if ban_expires:
+                if datetime.now(timezone.utc) > ban_expires:
+                    # Auto-unban expired bans
+                    self.unban_user(user_email)
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking ban status: {e}")
+            return False
+    
     def _format_user(self, user_doc: Dict) -> Dict:
         """Format user document for API response"""
         if not user_doc:
@@ -442,6 +543,9 @@ class MongoDBAuthDatabase:
             'email': user_doc['email'],
             'display_name': user_doc['display_name'],
             'is_verified': user_doc.get('is_verified', False),
+            'role': user_doc.get('role', 'user'),
+            'banned': user_doc.get('banned', False),
+            'stats': user_doc.get('stats', {}),
             'created_at': user_doc.get('created_at'),
             'last_login_at': user_doc.get('last_login_at')
         }

@@ -162,9 +162,9 @@ async def websocket_chat_handler(websocket: WebSocket):
             'room_id': room_id
         })
         
-        # Notify others
+        # Notify others (incremental update for performance)
         await chat_manager.broadcast_system_message(f"{display_name} joined the chat", room_id=room_id, exclude=user_email)
-        await chat_manager.broadcast_user_list(room_id)
+        await chat_manager.broadcast_user_joined(user_email, display_name, room_id, exclude=user_email)
         
         logger.info(f"✅ {user_email} ({display_name}) connected to room '{room_id}'. Room users: {len(chat_manager.rooms[room_id])}")
         
@@ -182,9 +182,10 @@ async def websocket_chat_handler(websocket: WebSocket):
             await chat_manager.handle_message(user_email, display_name, data, room_id)
             
     except WebSocketDisconnect:
-        chat_manager.disconnect(user_email, room_id)
-        await chat_manager.broadcast_system_message(f"{display_name} left the chat", room_id=room_id)
-        await chat_manager.broadcast_user_list(room_id)
+        display_name = chat_manager.disconnect(user_email, room_id)
+        if display_name:
+            await chat_manager.broadcast_system_message(f"{display_name} left the chat", room_id=room_id)
+            await chat_manager.broadcast_user_left(user_email, display_name, room_id)
     except Exception as e:
         logger.error(f"WebSocket error for {user_email} in room {room_id}: {e}")
         chat_manager.disconnect(user_email, room_id)

@@ -33,7 +33,9 @@ class MongoDBChatDatabase:
         message_type: str = 'text',
         room_id: str = 'general',
         metadata: Optional[Dict] = None,
-        reply_to: Optional[str] = None
+        reply_to: Optional[str] = None,
+        mentioned_users: Optional[List[str]] = None,
+        attachments: Optional[List[Dict]] = None
     ) -> Dict:
         """
         Save a chat message to MongoDB
@@ -64,7 +66,11 @@ class MongoDBChatDatabase:
                 'deleted': False,
                 'metadata': metadata or {},
                 'created_at': datetime.now(timezone.utc),
-                'topic_id': None  # Will be set below
+                'topic_id': None,  # Will be set below
+                # Rich content fields
+                'mentioned_users': mentioned_users or [],  # List of @mentioned email addresses
+                'attachments': attachments or [],  # File attachments
+                'reply_count': 0  # Denormalized count of replies to this message
             }
             
             # If replying to a message, store a snapshot (not just ID)
@@ -96,6 +102,24 @@ class MongoDBChatDatabase:
             
             result = self.messages.insert_one(message_doc)
             message_doc['_id'] = result.inserted_id
+            
+            # If this is a reply, increment the parent's reply_count
+            if reply_to:
+                try:
+                    self.messages.update_one(
+                        {'_id': ObjectId(reply_to)},
+                        {'$inc': {'reply_count': 1}}
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not increment reply_count: {e}")
+            
+            # Update user statistics (non-blocking)
+            try:
+                from models.mongodb_auth import auth_db
+                if auth_db:
+                    auth_db.increment_user_message_count(user_email)
+            except Exception as e:
+                logger.warning(f"Could not update user stats: {e}")
             
             # Convert for API response
             return self._format_message(message_doc)
@@ -397,7 +421,10 @@ class MongoDBChatDatabase:
             'roomId': message_doc.get('room_id', 'general'),
             'edited': message_doc.get('edited', False),
             'reactions': message_doc.get('reactions', []),
-            'topicId': message_doc.get('topic_id')  # Include topic_id for thread segregation
+            'topicId': message_doc.get('topic_id'),  # Include topic_id for thread segregation
+            'mentionedUsers': message_doc.get('mentioned_users', []),
+            'attachments': message_doc.get('attachments', []),
+            'replyCount': message_doc.get('reply_count', 0)
         }
         
         # Include image metadata for image messages

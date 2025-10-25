@@ -7,10 +7,58 @@ import json
 import logging
 from datetime import datetime
 from typing import Dict, List, Set
+from collections import deque
+from time import time
 from fastapi import WebSocket, WebSocketDisconnect
 from models.mongodb_chat import chat_db
 
 logger = logging.getLogger(__name__)
+
+
+class RateLimiter:
+    """Rate limiter using sliding window algorithm to prevent spam"""
+    
+    def __init__(self, max_messages: int = 10, window_seconds: int = 10):
+        """
+        Args:
+            max_messages: Maximum messages allowed in time window
+            window_seconds: Time window in seconds
+        """
+        self.max_messages = max_messages
+        self.window = window_seconds
+        self.user_messages: Dict[str, deque] = {}  # {email: deque of timestamps}
+    
+    def is_allowed(self, user_email: str) -> bool:
+        """Check if user is allowed to send a message"""
+        now = time()
+        
+        # Initialize user's message history if not exists
+        if user_email not in self.user_messages:
+            self.user_messages[user_email] = deque()
+        
+        # Remove timestamps outside the window
+        while (self.user_messages[user_email] and 
+               now - self.user_messages[user_email][0] > self.window):
+            self.user_messages[user_email].popleft()
+        
+        # Check if limit exceeded
+        if len(self.user_messages[user_email]) >= self.max_messages:
+            return False
+        
+        # Record this message
+        self.user_messages[user_email].append(now)
+        return True
+    
+    def get_remaining(self, user_email: str) -> int:
+        """Get remaining messages allowed for user"""
+        if user_email not in self.user_messages:
+            return self.max_messages
+        
+        now = time()
+        # Count messages in current window
+        valid_messages = sum(1 for ts in self.user_messages[user_email] 
+                           if now - ts <= self.window)
+        return max(0, self.max_messages - valid_messages)
 
 
 class ChatDatabase:
@@ -62,6 +110,7 @@ class ConnectionManager:
         # Active connections per room: {room_id: {email: {'ws': websocket, 'display_name': name}}}
         self.rooms: Dict[str, Dict[str, Dict]] = {}
         self.db = ChatDatabase()
+        self.rate_limiter = RateLimiter(max_messages=10, window_seconds=10)  # 10 messages per 10 seconds
     
     def get_display_name(self, email: str, room_id: str) -> str:
         """Get display name for a user in a specific room"""
@@ -91,43 +140,60 @@ class ConnectionManager:
             'room_id': room_id
         })
         
-        # Notify others in this room about new user
+        # Notify others in this room about new user (incremental update)
         await self.broadcast_system_message(f"{display_name} joined the chat", room_id=room_id, exclude=user_email)
-        await self.broadcast_user_list(room_id)
+        await self.broadcast_user_joined(user_email, display_name, room_id, exclude=user_email)
         
         logger.info(f"✅ {user_email} ({display_name}) connected to room '{room_id}'. Room users: {len(self.rooms[room_id])}")
     
-    def disconnect(self, user_email: str, room_id: str):
-        """Remove connection from a specific room"""
+    def disconnect(self, user_email: str, room_id: str, broadcast_update: bool = True) -> str:
+        """Remove connection from a specific room
+        
+        Returns:
+            display_name of disconnected user
+        """
+        display_name = None
         if room_id in self.rooms and user_email in self.rooms[room_id]:
+            display_name = self.rooms[room_id][user_email]['display_name']
             del self.rooms[room_id][user_email]
             # Clean up empty rooms
             if not self.rooms[room_id]:
                 del self.rooms[room_id]
-            logger.info(f"❌ {user_email} disconnected from room '{room_id}'. Remaining rooms: {len(self.rooms)}")
+            logger.info(f"❌ {user_email} ({display_name}) disconnected from room '{room_id}'. Remaining rooms: {len(self.rooms)}")
+        return display_name
     
     async def send_personal_message(self, message: str, websocket: WebSocket):
         """Send message to specific websocket"""
         await websocket.send_text(message)
     
     async def broadcast(self, message: Dict, room_id: str, exclude: str = None):
-        """Broadcast message to all connected clients in a specific room"""
+        """Broadcast message to all connected clients in a specific room (optimized with asyncio.gather)"""
         if room_id not in self.rooms:
             return
         
-        disconnected = []
+        # Create tasks for all sends (parallel execution)
+        tasks = []
+        emails = []
         
         for email, conn_info in self.rooms[room_id].items():
             if exclude and email == exclude:
                 continue
-            
-            try:
-                await conn_info['ws'].send_json(message)
-            except Exception as e:
-                logger.error(f"Error sending to {email} in room {room_id}: {e}")
-                disconnected.append(email)
+            tasks.append(conn_info['ws'].send_json(message))
+            emails.append(email)
+        
+        if not tasks:
+            return
+        
+        # Execute all sends in parallel and collect results
+        results = await asyncio.gather(*tasks, return_exceptions=True)
         
         # Clean up disconnected clients
+        disconnected = []
+        for email, result in zip(emails, results):
+            if isinstance(result, Exception):
+                logger.error(f"Error sending to {email} in room {room_id}: {result}")
+                disconnected.append(email)
+        
         for email in disconnected:
             self.disconnect(email, room_id)
     
@@ -140,8 +206,30 @@ class ConnectionManager:
         }
         await self.broadcast(msg_data, room_id=room_id, exclude=exclude)
     
+    async def broadcast_user_joined(self, user_email: str, display_name: str, room_id: str, exclude: str = None):
+        """Broadcast incremental update when user joins (optimized for 1000+ users)"""
+        msg_data = {
+            'type': 'user_joined',
+            'user': {
+                'email': user_email,
+                'displayName': display_name
+            },
+            'count': len(self.rooms.get(room_id, {}))
+        }
+        await self.broadcast(msg_data, room_id=room_id, exclude=exclude)
+    
+    async def broadcast_user_left(self, user_email: str, display_name: str, room_id: str):
+        """Broadcast incremental update when user leaves (optimized for 1000+ users)"""
+        msg_data = {
+            'type': 'user_left',
+            'email': user_email,
+            'displayName': display_name,
+            'count': len(self.rooms.get(room_id, {}))
+        }
+        await self.broadcast(msg_data, room_id=room_id)
+    
     async def broadcast_user_list(self, room_id: str):
-        """Broadcast list of online users in a specific room"""
+        """Broadcast full user list (only used on initial connection)"""
         if room_id not in self.rooms:
             return
         
@@ -180,11 +268,25 @@ class ConnectionManager:
         
         logger.info(f"📨 Received message from {user_email} in room '{room_id}': type={message_type}, data={data}")
         
-        # Handle profile update message
+        # Handle profile update message (bypass rate limit)
         if message_type == 'profile_update':
             new_display_name = data.get('displayName', '')
             if new_display_name:
                 await self.update_user_display_name(user_email, new_display_name, room_id)
+            return None
+        
+        # Apply rate limiting for regular messages
+        if not self.rate_limiter.is_allowed(user_email):
+            remaining = self.rate_limiter.get_remaining(user_email)
+            logger.warning(f"⚠️ Rate limit exceeded for {user_email} in room '{room_id}'")
+            
+            # Send error message back to user
+            if room_id in self.rooms and user_email in self.rooms[room_id]:
+                await self.rooms[room_id][user_email]['ws'].send_json({
+                    'type': 'error',
+                    'message': f'Rate limit exceeded. Please wait before sending more messages. ({remaining} remaining)',
+                    'code': 'RATE_LIMIT_EXCEEDED'
+                })
             return None
         
         # Regular chat message
