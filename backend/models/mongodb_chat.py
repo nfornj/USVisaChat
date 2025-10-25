@@ -5,7 +5,7 @@ Handles chat messages storage and retrieval with full history
 
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from bson import ObjectId
 from models.mongodb_connection import mongodb_client
 
@@ -33,7 +33,9 @@ class MongoDBChatDatabase:
         message_type: str = 'text',
         room_id: str = 'general',
         metadata: Optional[Dict] = None,
-        reply_to: Optional[str] = None
+        reply_to: Optional[str] = None,
+        mentioned_users: Optional[List[str]] = None,
+        attachments: Optional[List[Dict]] = None
     ) -> Dict:
         """
         Save a chat message to MongoDB
@@ -63,11 +65,17 @@ class MongoDBChatDatabase:
                 'edited_at': None,
                 'deleted': False,
                 'metadata': metadata or {},
-                'created_at': datetime.now(timezone.utc)
+                'created_at': datetime.now(timezone.utc),
+                'topic_id': None,  # Will be set below
+                # Rich content fields
+                'mentioned_users': mentioned_users or [],  # List of @mentioned email addresses
+                'attachments': attachments or [],  # File attachments
+                'reply_count': 0  # Denormalized count of replies to this message
             }
             
             # If replying to a message, store a snapshot (not just ID)
             # This is more efficient and preserves context even if original is edited/deleted
+            # Also compute topic_id for thread segregation
             if reply_to:
                 try:
                     from bson.objectid import ObjectId
@@ -81,13 +89,37 @@ class MongoDBChatDatabase:
                             'message': replied_msg['message'][:150],  # Truncate for space efficiency
                             'timestamp': replied_msg['created_at']
                         }
+                        # Inherit topic_id from parent (for thread segregation)
+                        # If parent has topic_id, use it; otherwise parent is the topic root
+                        message_doc['topic_id'] = replied_msg.get('topic_id') or str(replied_msg['_id'])
                     else:
                         logger.warning(f"Replied message {reply_to} not found")
+                        # Fallback: use reply_to as topic_id
+                        message_doc['topic_id'] = reply_to
                 except Exception as e:
                     logger.error(f"Error fetching replied message: {e}")
+                    message_doc['topic_id'] = reply_to
             
             result = self.messages.insert_one(message_doc)
             message_doc['_id'] = result.inserted_id
+            
+            # If this is a reply, increment the parent's reply_count
+            if reply_to:
+                try:
+                    self.messages.update_one(
+                        {'_id': ObjectId(reply_to)},
+                        {'$inc': {'reply_count': 1}}
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not increment reply_count: {e}")
+            
+            # Update user statistics (non-blocking)
+            try:
+                from models.mongodb_auth import auth_db
+                if auth_db:
+                    auth_db.increment_user_message_count(user_email)
+            except Exception as e:
+                logger.warning(f"Could not update user stats: {e}")
             
             # Convert for API response
             return self._format_message(message_doc)
@@ -191,26 +223,50 @@ class MongoDBChatDatabase:
         self, 
         message_id: str, 
         new_content: str, 
-        user_email: str
-    ) -> bool:
+        user_email: str,
+        edit_window_minutes: int = 15
+    ) -> Dict[str, Any]:
         """
-        Edit a message (only by original author)
+        Edit a message (only by original author within time window)
         
         Args:
             message_id: Message ID to edit
             new_content: New message content
             user_email: Email of user attempting to edit
+            edit_window_minutes: Time window in minutes to allow editing (default 15)
         
         Returns:
-            bool: True if edited successfully
+            Dict: {'success': bool, 'message': str, 'edited_message': dict}
         """
         try:
+            # First, check if the message exists and if user is authorized
+            message = self.messages.find_one({
+                '_id': ObjectId(message_id),
+                'user_email': user_email,
+                'deleted': False
+            })
+            
+            if not message:
+                return {'success': False, 'message': 'Message not found or not authorized'}
+            
+            # Check if within edit window (15 minutes by default)
+            message_time = message['created_at']
+            # Ensure message_time is timezone-aware
+            if message_time.tzinfo is None:
+                message_time = message_time.replace(tzinfo=timezone.utc)
+            current_time = datetime.now(timezone.utc)
+            time_diff = current_time - message_time
+            
+            if time_diff.total_seconds() > (edit_window_minutes * 60):
+                minutes_ago = int(time_diff.total_seconds() / 60)
+                return {
+                    'success': False, 
+                    'message': f'Edit window expired. Message was posted {minutes_ago} minutes ago. Can only edit within {edit_window_minutes} minutes.'
+                }
+            
+            # Update the message
             result = self.messages.update_one(
-                {
-                    '_id': ObjectId(message_id),
-                    'user_email': user_email,  # Only author can edit
-                    'deleted': False
-                },
+                {'_id': ObjectId(message_id)},
                 {
                     '$set': {
                         'message': new_content,
@@ -221,15 +277,20 @@ class MongoDBChatDatabase:
             )
             
             if result.modified_count > 0:
+                # Get the updated message
+                updated_message = self.messages.find_one({'_id': ObjectId(message_id)})
                 logger.info(f"✅ Message {message_id} edited by {user_email}")
-                return True
+                return {
+                    'success': True,
+                    'message': 'Message edited successfully',
+                    'edited_message': self._format_message(updated_message)
+                }
             
-            logger.warning(f"⚠️ Message {message_id} not found or not authorized")
-            return False
+            return {'success': False, 'message': 'Failed to update message'}
             
         except Exception as e:
             logger.error(f"❌ Error editing message: {e}")
-            return False
+            return {'success': False, 'message': str(e)}
     
     def delete_message(
         self, 
@@ -359,7 +420,11 @@ class MongoDBChatDatabase:
             'type': message_doc.get('message_type', 'text'),  # Keep for backwards compatibility
             'roomId': message_doc.get('room_id', 'general'),
             'edited': message_doc.get('edited', False),
-            'reactions': message_doc.get('reactions', [])
+            'reactions': message_doc.get('reactions', []),
+            'topicId': message_doc.get('topic_id'),  # Include topic_id for thread segregation
+            'mentionedUsers': message_doc.get('mentioned_users', []),
+            'attachments': message_doc.get('attachments', []),
+            'replyCount': message_doc.get('reply_count', 0)
         }
         
         # Include image metadata for image messages

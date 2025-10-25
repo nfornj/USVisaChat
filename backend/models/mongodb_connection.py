@@ -107,10 +107,20 @@ class MongoDBConnection:
         return all_valid
     
     def _get_connection_options(self) -> dict:
-        """Get connection options including TLS/certificate settings"""
+        """Get connection options including TLS/certificate settings and connection pooling"""
         options = {
+            # Connection timeouts
             "serverSelectionTimeoutMS": 5000,  # 5 second timeout
             "connectTimeoutMS": 10000,          # 10 second connection timeout
+            "socketTimeoutMS": 45000,           # 45 second socket timeout
+            
+            # Connection pooling (optimized for 1000+ concurrent users)
+            "maxPoolSize": 100,                 # Max 100 connections in pool
+            "minPoolSize": 10,                  # Keep 10 connections warm
+            "maxIdleTimeMS": 30000,             # Idle connections closed after 30s
+            "waitQueueTimeoutMS": 5000,         # Wait max 5s for connection from pool
+            
+            # Write settings
             "retryWrites": True,
             "w": "majority"                     # Write concern
         }
@@ -197,19 +207,59 @@ class MongoDBConnection:
         logger.info("📊 Creating MongoDB indexes...")
         
         try:
-            # Users collection indexes
+            # Users collection indexes (with new fields)
             users = self.db.users
             users.create_index("email", unique=True, name="idx_users_email")
             users.create_index("is_verified", name="idx_users_verified")
             users.create_index("last_login_at", name="idx_users_last_login")
-            logger.info("   ✅ Users indexes created")
             
-            # Messages collection indexes
+            # New indexes for moderation and stats
+            users.create_index("role", name="idx_users_role")
+            users.create_index("banned", name="idx_users_banned")
+            users.create_index(
+                [("banned", 1), ("ban_expires_at", 1)],
+                name="idx_users_banned_expires"
+            )
+            users.create_index("stats.message_count", name="idx_users_message_count")
+            users.create_index("stats.last_active", name="idx_users_last_active")
+            
+            logger.info("   ✅ Users indexes created (with moderation & stats)")
+            
+            # Messages collection indexes (optimized for 1000+ users)
             messages = self.db.messages
+            
+            # Primary query indexes
             messages.create_index([("created_at", -1)], name="idx_messages_created_desc")
             messages.create_index([("user_email", 1), ("created_at", -1)], name="idx_messages_user_created")
             messages.create_index([("room_id", 1), ("created_at", -1)], name="idx_messages_room_created")
-            logger.info("   ✅ Messages indexes created")
+            
+            # Compound index for room + deleted filter (most common query)
+            messages.create_index(
+                [("room_id", 1), ("deleted", 1), ("created_at", -1)],
+                name="idx_messages_room_deleted_created"
+            )
+            
+            # Topic/thread index for conversation threading
+            messages.create_index(
+                [("topic_id", 1), ("created_at", 1)],
+                name="idx_messages_topic_created"
+            )
+            
+            # Text search index (for message search feature)
+            try:
+                messages.create_index(
+                    [("message", "text")],
+                    name="idx_messages_text_search"
+                )
+                logger.info("   ✅ Messages text search index created")
+            except Exception as e:
+                logger.warning(f"   ⚠️  Text index already exists or error: {e}")
+            
+            # Indexes for new rich content fields
+            messages.create_index("mentioned_users", name="idx_messages_mentions")
+            messages.create_index("reply_count", name="idx_messages_reply_count")
+            
+            logger.info("   ✅ Messages indexes created (with rich content)")
             
             # Sessions collection indexes with TTL
             sessions = self.db.sessions

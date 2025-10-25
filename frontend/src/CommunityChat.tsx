@@ -10,9 +10,17 @@ import {
   ListItem,
   ListItemAvatar,
   ListItemText,
+  ListItemButton,
   Alert,
   CircularProgress,
   Divider,
+  ToggleButton,
+  ToggleButtonGroup,
+  Snackbar,
+  Drawer,
+  Badge,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import {
   Send as SendIcon,
@@ -21,6 +29,11 @@ import {
   Close as CloseIcon,
   Image as ImageIcon,
   AttachFile as AttachFileIcon,
+  ArrowBack as ArrowBackIcon,
+  Edit as EditIcon,
+  Check as CheckIcon,
+  Group as GroupIcon,
+  FormatListBulleted as ListIcon,
 } from "@mui/icons-material";
 
 interface ReplyToMessage {
@@ -40,6 +53,8 @@ interface Message {
   messageType?: string;
   imageUrl?: string;
   replyTo?: ReplyToMessage;
+  topicId?: string | null; // For thread segregation
+  edited?: boolean; // For edited messages
 }
 
 interface OnlineUser {
@@ -51,19 +66,45 @@ interface CommunityChatProps {
   userEmail: string;
   displayName: string;
   onOnlineCountChange: (count: number) => void;
+  roomId?: string; // Article/topic ID for room isolation
+  roomName?: string; // Article/topic name for display
+  onBackToTopics?: () => void; // Callback to go back to topics list
 }
 
 export default function CommunityChat({
   userEmail,
   displayName,
   onOnlineCountChange,
+  roomId = "general",
+  roomName = "General Discussion",
+  onBackToTopics,
 }: CommunityChatProps) {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(true);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+
+  // Edit message state
+  const [editingMessageId, setEditingMessageId] = useState<
+    string | number | null
+  >(null);
+  const [editContent, setEditContent] = useState("");
+
+  // Snackbar state for error/success messages
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: "success" | "error" | "info";
+  }>({
+    open: false,
+    message: "",
+    severity: "info",
+  });
 
   // Image upload state
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
@@ -77,10 +118,35 @@ export default function CommunityChat({
   });
   const [isResizing, setIsResizing] = useState(false);
 
+  // Right-side Questions panel width and resize
+  const [questionsWidth, setQuestionsWidth] = useState(() => {
+    const saved = localStorage.getItem("visa-chat-questions-width");
+    return saved ? parseInt(saved, 10) : 320;
+  });
+  const [isResizingQuestions, setIsResizingQuestions] = useState(false);
+  const resizeQuestionsStartX = useRef<number>(0);
+  const resizeQuestionsStartWidth = useRef<number>(questionsWidth);
+
+  // Compose mode and questions/jump state
+  const [composeMode, setComposeMode] = useState<"auto" | "question" | "info">(
+    "auto"
+  );
+  const messageRefs = useRef<Record<string | number, HTMLDivElement | null>>(
+    {}
+  );
+  // Topic/thread selection
+  const [selectedTopicId, setSelectedTopicId] = useState<
+    string | number | null
+  >(null);
+
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const previousDisplayNameRef = useRef<string>(displayName);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Mobile drawers visibility
+  const [openMembersDrawer, setOpenMembersDrawer] = useState(false);
+  const [openTopicsDrawer, setOpenTopicsDrawer] = useState(false);
 
   console.log("Connected as:", displayName, userEmail);
 
@@ -89,16 +155,25 @@ export default function CommunityChat({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // WebSocket connection
+  // WebSocket connection - reconnect when roomId changes
   useEffect(() => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${
       window.location.host
-    }/ws/chat/${encodeURIComponent(userEmail)}/${encodeURIComponent(
+    }/ws/chat?user_email=${encodeURIComponent(
+      userEmail
+    )}&display_name=${encodeURIComponent(
       displayName
-    )}`;
+    )}&room_id=${encodeURIComponent(roomId)}`;
 
-    console.log("Connecting to WebSocket:", wsUrl, "as", displayName);
+    console.log(
+      "Connecting to WebSocket:",
+      wsUrl,
+      "as",
+      displayName,
+      "room:",
+      roomId
+    );
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
@@ -113,7 +188,12 @@ export default function CommunityChat({
 
       switch (data.type) {
         case "history":
-          setMessages(data.messages || []);
+          setMessages(
+            (data.messages || []).map((m: any) => ({
+              ...m,
+              messageType: m.messageType,
+            }))
+          );
           break;
 
         case "message":
@@ -125,6 +205,7 @@ export default function CommunityChat({
               displayName: data.displayName,
               message: data.message,
               timestamp: data.timestamp,
+              messageType: data.messageType,
               replyTo: data.replyTo,
             },
           ]);
@@ -168,7 +249,7 @@ export default function CommunityChat({
         ws.close();
       }
     };
-  }, [userEmail, onOnlineCountChange]);
+  }, [userEmail, roomId, onOnlineCountChange]);
 
   // Handle display name changes without reconnecting
   useEffect(() => {
@@ -279,11 +360,14 @@ export default function CommunityChat({
       type: "image",
       message: input.trim() || "Sent an image",
       imageUrl: imageUrl,
+      messageType: classifyMessageType(input.trim() || ""),
     };
 
-    // Include reply information if replying
+    // Include reply information if replying or topic selected
     if (replyingTo) {
       messageData.replyTo = replyingTo.id;
+    } else if (selectedTopicId) {
+      messageData.replyTo = selectedTopicId;
     }
 
     wsRef.current.send(JSON.stringify(messageData));
@@ -307,11 +391,17 @@ export default function CommunityChat({
     const messageData: any = {
       type: "text",
       message: input.trim(),
+      messageType:
+        replyingTo || selectedTopicId
+          ? "info"
+          : classifyMessageType(input.trim()),
     };
 
     // Include reply information if replying
     if (replyingTo) {
       messageData.replyTo = replyingTo.id;
+    } else if (selectedTopicId) {
+      messageData.replyTo = selectedTopicId;
     }
 
     wsRef.current.send(JSON.stringify(messageData));
@@ -328,9 +418,80 @@ export default function CommunityChat({
     }
   };
 
-  const handleReply = (msg: Message) => {
-    setReplyingTo(msg);
+  // Edit message functions
+  const startEditingMessage = (msg: Message) => {
+    setEditingMessageId(msg.id!);
+    setEditContent(msg.message);
   };
+
+  const cancelEditing = () => {
+    setEditingMessageId(null);
+    setEditContent("");
+  };
+
+  const saveEditedMessage = async (messageId: string | number) => {
+    if (!editContent.trim()) return;
+
+    try {
+      const response = await fetch("/chat/edit-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message_id: messageId,
+          new_content: editContent.trim(),
+          user_email: userEmail,
+        }),
+      });
+
+      if (response.ok) {
+        await response.json();
+        // Update the message in local state
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === messageId
+              ? { ...m, message: editContent.trim(), edited: true }
+              : m
+          )
+        );
+        setSnackbar({
+          open: true,
+          message: "Message edited successfully",
+          severity: "success",
+        });
+        cancelEditing();
+      } else {
+        const error = await response.json();
+        setSnackbar({
+          open: true,
+          message: error.detail || "Failed to edit message",
+          severity: "error",
+        });
+      }
+    } catch (error) {
+      console.error("Error editing message:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to edit message. Please try again.",
+        severity: "error",
+      });
+    }
+  };
+
+  const canEditMessage = (msg: Message): boolean => {
+    if (msg.userEmail !== userEmail) return false;
+    const messageTime = new Date(msg.timestamp).getTime();
+    const now = new Date().getTime();
+    const minutesAgo = (now - messageTime) / 1000 / 60;
+    return minutesAgo < 15; // Can edit within 15 minutes
+  };
+
+  // When replying directly to a message, also select its root topic
+  // const handleReply = (msg: Message) => {
+  //   setReplyingTo(msg);
+  //   const rootId = findRootTopicId(msg);
+  //   if (rootId) setSelectedTopicId(rootId);
+  //   setTimeout(() => inputRef.current?.focus(), 0);
+  // };
 
   // Sidebar resize handlers
   const handleMouseDown = () => {
@@ -369,6 +530,42 @@ export default function CommunityChat({
     setSidebarWidth(280);
     localStorage.setItem("visa-chat-sidebar-width", "280");
   };
+
+  // Questions panel resize handlers
+  const handleMouseDownQuestions = (e: React.MouseEvent) => {
+    setIsResizingQuestions(true);
+    resizeQuestionsStartX.current = e.clientX;
+    resizeQuestionsStartWidth.current = questionsWidth;
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizingQuestions) return;
+      const delta = resizeQuestionsStartX.current - e.clientX;
+      const minWidth = 240;
+      const maxWidth = 500;
+      const newWidth = Math.max(
+        minWidth,
+        Math.min(maxWidth, resizeQuestionsStartWidth.current + delta)
+      );
+      setQuestionsWidth(newWidth);
+      localStorage.setItem("visa-chat-questions-width", newWidth.toString());
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingQuestions(false);
+    };
+
+    if (isResizingQuestions) {
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizingQuestions]);
 
   const formatTime = (timestamp: string) => {
     try {
@@ -419,211 +616,295 @@ export default function CommunityChat({
     return colors[index % colors.length];
   };
 
+  // Classification helpers and derived questions
+  const classifyMessageType = (text: string): "question" | "info" => {
+    if (composeMode === "question") return "question";
+    if (composeMode === "info") return "info";
+    return text.trim().endsWith("?") ? "question" : "info";
+  };
+
+  const getMessageType = (m: Message): "question" | "info" => {
+    if (m.messageType === "question" || m.messageType === "info")
+      return m.messageType;
+    return m.message?.trim().endsWith("?") ? "question" : "info";
+  };
+
+  // Build topic threads (Question/Info roots)
+  const nonSystemMessages = messages.filter((m) => m.type !== "system");
+  // Topics are question/info messages that are NOT replies
+  const topics = nonSystemMessages.filter((m) => {
+    if (m.replyTo) return false; // Replies are never root topics
+    return getMessageType(m) === "question" || getMessageType(m) === "info";
+  });
+  const messageById: Record<string | number, Message> = {} as any;
+  nonSystemMessages.forEach((m, i) => {
+    const key = m.id ?? `idx-${i}`;
+    (messageById as any)[key] = m;
+  });
+  const findRootTopicId = (msg: Message): string | number | null => {
+    // If it's a reply, walk up the chain to find root topic
+    if (!msg.replyTo) {
+      // No replyTo, so it's a root topic itself (if it's question/info)
+      if (
+        getMessageType(msg) === "question" ||
+        getMessageType(msg) === "info"
+      ) {
+        return msg.id ?? null;
+      }
+      return null;
+    }
+    let current: Message | undefined = msg;
+    const guard = new Set<string | number>();
+    while (current && current.replyTo) {
+      const parentId: any = current.replyTo.id as any;
+      if (guard.has(parentId)) break;
+      guard.add(parentId);
+      const parent = messageById[parentId];
+      if (!parent) {
+        // Parent not found in messageById, use the replyTo.id directly
+        return parentId;
+      }
+      if (
+        getMessageType(parent) === "question" ||
+        getMessageType(parent) === "info"
+      ) {
+        return parent.id ?? null;
+      }
+      current = parent;
+    }
+    return null;
+  };
+  const topicThreads: Record<string | number, Message[]> = {} as any;
+  topics.forEach((t) => {
+    const tid = t.id ?? `topic-${t.timestamp}`;
+    (topicThreads as any)[tid] = [t];
+  });
+  nonSystemMessages.forEach((m) => {
+    const rootId = findRootTopicId(m);
+    if (rootId && topicThreads[rootId]) {
+      if ((topicThreads[rootId] as any)[0] !== m)
+        (topicThreads[rootId] as any).push(m);
+    }
+  });
+  const sortedTopicIds = Object.keys(topicThreads).sort((a, b) => {
+    const at = new Date((topicThreads as any)[a][0].timestamp).getTime();
+    const bt = new Date((topicThreads as any)[b][0].timestamp).getTime();
+    return bt - at;
+  });
+  Object.keys(topicThreads).forEach((tid) => {
+    (topicThreads as any)[tid].sort(
+      (m1: Message, m2: Message) =>
+        new Date(m1.timestamp).getTime() - new Date(m2.timestamp).getTime()
+    );
+  });
+
   return (
     <Box
       sx={{ display: "flex", height: "100%", bgcolor: "background.default" }}
     >
-      {/* Online Users Sidebar - LEFT SIDE (Telegram Style) */}
-      <Paper
-        elevation={0}
-        sx={{
-          width: sidebarWidth,
-          minWidth: 200,
-          maxWidth: 500,
-          borderRight: 1,
-          borderColor: "divider",
-          display: "flex",
-          flexDirection: "column",
-          bgcolor: "background.paper",
-          position: "relative",
-          transition: isResizing ? "none" : "width 0.2s ease",
-        }}
-      >
-        {/* Sidebar Header */}
-        <Box
+      {/* Online Users Sidebar - LEFT SIDE (hidden on mobile, Drawer used) */}
+      {!isMobile && (
+        <Paper
+          elevation={0}
           sx={{
-            p: 2,
-            borderBottom: 1,
+            width: sidebarWidth,
+            minWidth: 200,
+            maxWidth: 500,
+            borderRight: 1,
             borderColor: "divider",
+            display: "flex",
+            flexDirection: "column",
+            bgcolor: "background.paper",
+            position: "relative",
+            transition: isResizing ? "none" : "width 0.2s ease",
           }}
         >
-          <Typography variant="subtitle1" fontWeight={600}>
-            Members
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {onlineUsers.length} online
-          </Typography>
-        </Box>
+          {/* Sidebar Header */}
+          <Box
+            sx={{
+              p: 2,
+              borderBottom: 1,
+              borderColor: "divider",
+            }}
+          >
+            <Typography variant="subtitle1" fontWeight={600}>
+              Members
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {onlineUsers.length} online
+            </Typography>
+          </Box>
 
-        {/* Users List */}
-        <List sx={{ flexGrow: 1, overflowY: "auto", p: 0 }}>
-          {onlineUsers.length === 0 ? (
-            <Box sx={{ p: 3, textAlign: "center" }}>
-              <Typography variant="body2" color="text.secondary">
-                No members online
-              </Typography>
-            </Box>
-          ) : (
-            onlineUsers.map((user, index) => {
-              const isCurrentUser = user.email === userEmail;
-              return (
-                <Box key={user.email}>
-                  <ListItem
-                    sx={{
-                      py: 1.5,
-                      px: 2,
-                      bgcolor: isCurrentUser
-                        ? "action.selected"
-                        : "transparent",
-                      "&:hover": {
-                        bgcolor: "action.hover",
-                      },
-                      cursor: "default",
-                    }}
-                  >
-                    <ListItemAvatar sx={{ minWidth: 48 }}>
-                      <Box sx={{ position: "relative" }}>
-                        <Avatar
-                          sx={{
-                            bgcolor: getAvatarColor(user.email),
-                            width: 40,
-                            height: 40,
-                            fontWeight: 500,
-                          }}
-                        >
-                          {user.displayName.charAt(0).toUpperCase()}
-                        </Avatar>
-                        <Box
-                          sx={{
-                            position: "absolute",
-                            bottom: 0,
-                            right: 0,
-                            width: 12,
-                            height: 12,
-                            borderRadius: "50%",
-                            bgcolor: "success.main",
-                            border: 2,
-                            borderColor: "background.paper",
-                          }}
-                        />
-                      </Box>
-                    </ListItemAvatar>
-                    <ListItemText
-                      primary={
-                        <Box
-                          sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 0.5,
-                          }}
-                        >
+          {/* Users List */}
+          <List sx={{ flexGrow: 1, overflowY: "auto", p: 0 }}>
+            {onlineUsers.length === 0 ? (
+              <Box sx={{ p: 3, textAlign: "center" }}>
+                <Typography variant="body2" color="text.secondary">
+                  No members online
+                </Typography>
+              </Box>
+            ) : (
+              onlineUsers.map((user, index) => {
+                const isCurrentUser = user.email === userEmail;
+                return (
+                  <Box key={user.email}>
+                    <ListItem
+                      sx={{
+                        py: 1.5,
+                        px: 2,
+                        bgcolor: isCurrentUser
+                          ? "action.selected"
+                          : "transparent",
+                        "&:hover": {
+                          bgcolor: "action.hover",
+                        },
+                        cursor: "default",
+                      }}
+                    >
+                      <ListItemAvatar sx={{ minWidth: 48 }}>
+                        <Box sx={{ position: "relative" }}>
+                          <Avatar
+                            sx={{
+                              bgcolor: getAvatarColor(user.email),
+                              width: 40,
+                              height: 40,
+                              fontWeight: 500,
+                            }}
+                          >
+                            {user.displayName.charAt(0).toUpperCase()}
+                          </Avatar>
+                          <Box
+                            sx={{
+                              position: "absolute",
+                              bottom: 0,
+                              right: 0,
+                              width: 12,
+                              height: 12,
+                              borderRadius: "50%",
+                              bgcolor: "success.main",
+                              border: 2,
+                              borderColor: "background.paper",
+                            }}
+                          />
+                        </Box>
+                      </ListItemAvatar>
+                      <ListItemText
+                        primary={
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 0.5,
+                            }}
+                          >
+                            <Typography
+                              variant="body2"
+                              fontWeight={isCurrentUser ? 600 : 500}
+                              sx={{
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {user.displayName}
+                            </Typography>
+                            {isCurrentUser && (
+                              <Typography
+                                variant="caption"
+                                color="primary"
+                                sx={{ fontWeight: 500 }}
+                              >
+                                (You)
+                              </Typography>
+                            )}
+                          </Box>
+                        }
+                        secondary={
                           <Typography
-                            variant="body2"
-                            fontWeight={isCurrentUser ? 600 : 500}
+                            variant="caption"
+                            color="text.secondary"
                             sx={{
                               overflow: "hidden",
                               textOverflow: "ellipsis",
                               whiteSpace: "nowrap",
+                              display: "block",
                             }}
                           >
-                            {user.displayName}
+                            {user.email}
                           </Typography>
-                          {isCurrentUser && (
-                            <Typography
-                              variant="caption"
-                              color="primary"
-                              sx={{ fontWeight: 500 }}
-                            >
-                              (You)
-                            </Typography>
-                          )}
-                        </Box>
-                      }
-                      secondary={
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                            display: "block",
-                          }}
-                        >
-                          {user.email}
-                        </Typography>
-                      }
-                    />
-                  </ListItem>
-                  {index < onlineUsers.length - 1 && (
-                    <Divider variant="inset" component="li" />
-                  )}
-                </Box>
-              );
-            })
-          )}
-        </List>
+                        }
+                      />
+                    </ListItem>
+                    {index < onlineUsers.length - 1 && (
+                      <Divider variant="inset" component="li" />
+                    )}
+                  </Box>
+                );
+              })
+            )}
+          </List>
 
-        {/* Footer Info */}
-        <Box
-          sx={{
-            p: 2,
-            borderTop: 1,
-            borderColor: "divider",
-            bgcolor: "action.hover",
-          }}
-        >
-          <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
-            <InfoIcon fontSize="small" color="info" sx={{ mt: 0.25 }} />
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ lineHeight: 1.4 }}
-            >
-              Real-time messaging. All messages are visible to online members.
-            </Typography>
-          </Box>
-        </Box>
-
-        {/* Resize Handle */}
-        <Box
-          onMouseDown={handleMouseDown}
-          onDoubleClick={handleDoubleClickDivider}
-          sx={{
-            position: "absolute",
-            top: 0,
-            right: -4,
-            width: 8,
-            height: "100%",
-            cursor: "col-resize",
-            zIndex: 10,
-            transition: "background-color 0.2s",
-            "&:hover": {
-              bgcolor: "primary.main",
-            },
-            "&:active": {
-              bgcolor: "primary.dark",
-            },
-          }}
-        >
-          {/* Visual indicator on hover */}
+          {/* Footer Info */}
           <Box
             sx={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              width: 4,
-              height: 40,
-              borderRadius: 2,
-              bgcolor: isResizing ? "primary.main" : "transparent",
-              transition: "background-color 0.2s",
+              p: 2,
+              borderTop: 1,
+              borderColor: "divider",
+              bgcolor: "action.hover",
             }}
-          />
-        </Box>
-      </Paper>
+          >
+            <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
+              <InfoIcon fontSize="small" color="info" sx={{ mt: 0.25 }} />
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ lineHeight: 1.4 }}
+              >
+                Real-time messaging. All messages are visible to online members.
+              </Typography>
+            </Box>
+          </Box>
 
-      {/* Main Chat Area - RIGHT SIDE */}
+          {/* Resize Handle */}
+          <Box
+            onMouseDown={handleMouseDown}
+            onDoubleClick={handleDoubleClickDivider}
+            sx={{
+              position: "absolute",
+              top: 0,
+              right: -4,
+              width: 8,
+              height: "100%",
+              cursor: "col-resize",
+              zIndex: 10,
+              transition: "background-color 0.2s",
+              "&:hover": {
+                bgcolor: "primary.main",
+              },
+              "&:active": {
+                bgcolor: "primary.dark",
+              },
+            }}
+          >
+            {/* Visual indicator on hover */}
+            <Box
+              sx={{
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+                width: 4,
+                height: 40,
+                borderRadius: 0,
+                bgcolor: isResizing ? "primary.main" : "transparent",
+                transition: "background-color 0.2s",
+              }}
+            />
+          </Box>
+        </Paper>
+      )}
+
+      {/* Main Chat Area - CENTER */}
       <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }}>
         {/* Chat Header */}
         <Paper
@@ -636,6 +917,33 @@ export default function CommunityChat({
           }}
         >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+            {isMobile && (
+              <>
+                <IconButton onClick={() => setOpenMembersDrawer(true)}>
+                  <Badge color="primary" badgeContent={onlineUsers.length}>
+                    <GroupIcon />
+                  </Badge>
+                </IconButton>
+                <IconButton onClick={() => setOpenTopicsDrawer(true)}>
+                  <ListIcon />
+                </IconButton>
+              </>
+            )}
+            {onBackToTopics && (
+              <IconButton
+                onClick={onBackToTopics}
+                size="small"
+                sx={{
+                  color: "text.secondary",
+                  "&:hover": {
+                    color: "primary.main",
+                    bgcolor: "action.hover",
+                  },
+                }}
+              >
+                <ArrowBackIcon />
+              </IconButton>
+            )}
             <Box
               sx={{
                 width: 8,
@@ -644,9 +952,16 @@ export default function CommunityChat({
                 bgcolor: isConnected ? "success.main" : "error.main",
               }}
             />
-            <Typography variant="h6" fontWeight={500}>
-              Community Chat
-            </Typography>
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="h6" fontWeight={500}>
+                {roomName}
+              </Typography>
+              {roomId !== "general" && (
+                <Typography variant="caption" color="text.secondary">
+                  Article Discussion
+                </Typography>
+              )}
+            </Box>
             <Typography
               variant="body2"
               color="text.secondary"
@@ -671,14 +986,17 @@ export default function CommunityChat({
           </Alert>
         )}
 
-        {/* Messages Area */}
+        {/* Chat Messages Area */}
         <Box
           sx={{
             flexGrow: 1,
             overflowY: "auto",
             overflowX: "hidden",
-            px: 2,
-            py: 1,
+            WebkitOverflowScrolling: "touch",
+            overscrollBehavior: "contain",
+            scrollBehavior: "smooth",
+            px: 3,
+            py: 2,
             bgcolor: "background.default",
             "&::-webkit-scrollbar": {
               width: "8px",
@@ -695,7 +1013,7 @@ export default function CommunityChat({
             },
           }}
         >
-          {messages.length === 0 ? (
+          {sortedTopicIds.length === 0 ? (
             <Box
               sx={{
                 display: "flex",
@@ -709,273 +1027,546 @@ export default function CommunityChat({
             >
               <InfoIcon sx={{ fontSize: 48, mb: 2, opacity: 0.3 }} />
               <Typography variant="h6" color="text.secondary" gutterBottom>
-                No messages yet
+                No topics yet
               </Typography>
               <Typography variant="body2" color="text.disabled">
-                Start the conversation!
+                Start by posting a Question or Information topic.
               </Typography>
             </Box>
-          ) : (
-            <Box sx={{ py: 1 }}>
-              {messages.map((msg, index) => {
-                const isCurrentUser = msg.userEmail === userEmail;
-                const isSystem = msg.type === "system";
-                const showAvatar =
-                  index === 0 ||
-                  messages[index - 1].userEmail !== msg.userEmail;
-
-                if (isSystem) {
-                  return (
+          ) : selectedTopicId ? (
+            // TOPIC ISOLATION: Show only the selected topic's thread
+            (() => {
+              const thread = (topicThreads as any)[
+                selectedTopicId
+              ] as Message[];
+              if (!thread) return null;
+              const root = thread[0];
+              const topicType = getMessageType(root);
+              return (
+                <Box sx={{ maxWidth: 900, mx: "auto", width: "100%" }}>
+                  {/* Topic Header - Bold and Highlighted */}
+                  <Box
+                    sx={{
+                      mb: 3,
+                      p: 2,
+                      borderRadius: 0,
+                      bgcolor:
+                        topicType === "question"
+                          ? "rgba(251, 191, 36, 0.1)"
+                          : "rgba(96, 165, 250, 0.1)",
+                      border: 1,
+                      borderColor:
+                        topicType === "question" ? "warning.main" : "info.main",
+                    }}
+                  >
                     <Box
-                      key={index}
                       sx={{
                         display: "flex",
-                        justifyContent: "center",
-                        my: 2,
+                        alignItems: "center",
+                        gap: 1.5,
+                        mb: 1,
                       }}
                     >
-                      <Box
+                      <Typography
+                        variant="caption"
                         sx={{
-                          bgcolor: "action.hover",
-                          px: 2,
+                          px: 1.5,
                           py: 0.5,
-                          borderRadius: 1,
+                          borderRadius: 0,
+                          bgcolor:
+                            topicType === "question"
+                              ? "warning.main"
+                              : "info.main",
+                          color:
+                            topicType === "question"
+                              ? "warning.contrastText"
+                              : "info.contrastText",
+                          fontWeight: 700,
+                          letterSpacing: 0.5,
+                          textTransform: "uppercase",
                         }}
                       >
+                        {topicType === "question" ? "Question" : "Information"}
+                      </Typography>
+                      <Box
+                        sx={{ display: "flex", alignItems: "center", gap: 1 }}
+                      >
+                        <Avatar
+                          sx={{
+                            width: 24,
+                            height: 24,
+                            bgcolor: getAvatarColor(root.userEmail),
+                            fontSize: "0.7rem",
+                          }}
+                        >
+                          {root.displayName.charAt(0).toUpperCase()}
+                        </Avatar>
+                        <Typography variant="body2" fontWeight={500}>
+                          {root.displayName}
+                        </Typography>
                         <Typography variant="caption" color="text.secondary">
-                          {msg.message}
+                          • {formatTime(root.timestamp)}
                         </Typography>
                       </Box>
                     </Box>
-                  );
-                }
-
-                return (
-                  <Box
-                    key={msg.id || index}
-                    sx={{
-                      display: "flex",
-                      flexDirection: isCurrentUser ? "row-reverse" : "row",
-                      gap: 1,
-                      mb: 0.5,
-                      alignItems: "flex-start",
-                      "&:hover .reply-button": {
-                        opacity: 1,
-                      },
-                    }}
-                  >
-                    {/* Avatar - always present to maintain alignment */}
-                    <Avatar
-                      sx={{
-                        width: 32,
-                        height: 32,
-                        bgcolor: getAvatarColor(msg.userEmail),
-                        fontSize: "0.875rem",
-                        fontWeight: 500,
-                        visibility: showAvatar ? "visible" : "hidden",
-                      }}
-                    >
-                      {msg.displayName.charAt(0).toUpperCase()}
-                    </Avatar>
-
-                    <Box
-                      sx={{
-                        flexGrow: 1,
-                        maxWidth: "calc(100% - 48px)",
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: isCurrentUser ? "flex-end" : "flex-start",
-                        position: "relative",
-                      }}
-                    >
-                      {/* Sender name - only for first in sequence */}
-                      {showAvatar && (
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            mb: 0.25,
-                            color: getAvatarColor(msg.userEmail),
-                            fontWeight: 600,
-                          }}
-                        >
-                          {msg.displayName}
-                          {isCurrentUser && (
-                            <Typography
-                              component="span"
-                              variant="caption"
-                              sx={{ ml: 0.5, opacity: 0.7 }}
-                            >
-                              (You)
-                            </Typography>
-                          )}
-                        </Typography>
-                      )}
-
-                      {/* Message bubble */}
+                    {editingMessageId === root.id ? (
                       <Box
                         sx={{
-                          position: "relative",
+                          display: "flex",
+                          gap: 1,
+                          alignItems: "flex-start",
+                          mt: 1,
                         }}
                       >
+                        <TextField
+                          fullWidth
+                          multiline
+                          maxRows={6}
+                          value={editContent}
+                          onChange={(e) => setEditContent(e.target.value)}
+                          autoFocus
+                          size="small"
+                          sx={{ bgcolor: "background.paper" }}
+                        />
+                        <IconButton
+                          size="small"
+                          color="primary"
+                          onClick={() => saveEditedMessage(root.id!)}
+                        >
+                          <CheckIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton size="small" onClick={cancelEditing}>
+                          <CloseIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    ) : (
+                      <>
                         <Box
                           sx={{
-                            px: 2,
-                            py: 1,
-                            bgcolor: isCurrentUser
-                              ? "primary.main"
-                              : "background.paper",
-                            color: isCurrentUser
-                              ? "primary.contrastText"
-                              : "text.primary",
-                            borderRadius: "8px",
-                            boxShadow: (theme) =>
-                              theme.palette.mode === "dark"
-                                ? "0 1px 2px rgba(0,0,0,0.3)"
-                                : "0 1px 2px rgba(0,0,0,0.1)",
-                            border: 1,
-                            borderColor: isCurrentUser
-                              ? "primary.main"
-                              : "divider",
+                            display: "flex",
+                            alignItems: "flex-start",
+                            gap: 1,
                           }}
                         >
-                          {/* Reply preview */}
-                          {msg.replyTo && (
-                            <Box
+                          <Typography
+                            variant="body1"
+                            sx={{
+                              fontWeight: 600,
+                              color: "text.primary",
+                              whiteSpace: "pre-wrap",
+                              wordBreak: "break-word",
+                              flex: 1,
+                            }}
+                          >
+                            {root.message}
+                          </Typography>
+                          {canEditMessage(root) && (
+                            <IconButton
+                              size="small"
+                              onClick={() => startEditingMessage(root)}
                               sx={{
-                                mb: 0.5,
-                                pl: 1,
-                                py: 0.5,
-                                borderLeft: 3,
-                                borderColor: isCurrentUser
-                                  ? "rgba(255,255,255,0.5)"
-                                  : "primary.main",
-                                bgcolor: isCurrentUser
-                                  ? "rgba(0,0,0,0.15)"
-                                  : "action.hover",
-                                borderRadius: 1,
+                                opacity: 0.6,
+                                "&:hover": { opacity: 1 },
                               }}
                             >
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  fontWeight: 600,
-                                  color: isCurrentUser
-                                    ? "rgba(255,255,255,0.95)"
-                                    : "primary.main",
-                                  display: "block",
-                                }}
-                              >
-                                {msg.replyTo.displayName}
-                              </Typography>
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  color: isCurrentUser
-                                    ? "rgba(255,255,255,0.8)"
-                                    : "text.secondary",
-                                  display: "block",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  whiteSpace: "nowrap",
-                                }}
-                              >
-                                {msg.replyTo.message}
-                              </Typography>
-                            </Box>
+                              <EditIcon sx={{ fontSize: 18 }} />
+                            </IconButton>
                           )}
-
-                          {/* Image message */}
-                          {msg.imageUrl && (
-                            <Box
-                              sx={{
-                                mb: msg.message ? 1 : 0,
-                                maxWidth: "250px",
-                                borderRadius: 2,
-                                overflow: "hidden",
-                                cursor: "pointer",
-                                "&:hover": {
-                                  opacity: 0.9,
-                                },
-                              }}
-                              onClick={() =>
-                                window.open(msg.imageUrl, "_blank")
-                              }
-                            >
-                              <img
-                                src={msg.imageUrl}
-                                alt="Shared image"
-                                loading="lazy"
-                                style={{
-                                  width: "100%",
-                                  height: "auto",
-                                  display: "block",
-                                }}
-                              />
-                            </Box>
-                          )}
-
-                          {/* Text message */}
-                          {msg.message && (
-                            <Typography
-                              variant="body2"
-                              sx={{
-                                whiteSpace: "pre-wrap",
-                                wordBreak: "break-word",
-                                lineHeight: 1.5,
-                              }}
-                            >
-                              {msg.message}
-                            </Typography>
-                          )}
-
-                          {/* Timestamp */}
+                        </Box>
+                        {root.edited && (
                           <Typography
                             variant="caption"
                             sx={{
                               display: "block",
-                              mt: 0.25,
-                              opacity: 0.65,
+                              mt: 0.5,
                               fontSize: "0.7rem",
-                              textAlign: "right",
+                              fontStyle: "italic",
+                              opacity: 0.7,
                             }}
                           >
-                            {formatTime(msg.timestamp)}
+                            (edited)
                           </Typography>
-                        </Box>
+                        )}
+                      </>
+                    )}
+                  </Box>
 
-                        {/* Reply button (shows on hover) */}
-                        <IconButton
-                          className="reply-button"
-                          size="small"
-                          onClick={() => handleReply(msg)}
+                  {/* Replies - Natural chat flow */}
+                  <Box sx={{ pl: 2 }}>
+                    {thread.slice(1).length === 0 ? (
+                      <Box
+                        sx={{
+                          p: 3,
+                          textAlign: "center",
+                          bgcolor: "action.hover",
+                          borderRadius: 0,
+                          border: 1,
+                          borderColor: "divider",
+                          borderStyle: "dashed",
+                        }}
+                      >
+                        <Typography variant="body2" color="text.secondary">
+                          No replies yet. Be the first to respond!
+                        </Typography>
+                      </Box>
+                    ) : (
+                      thread.slice(1).map((msg, idx) => {
+                        const isCurrentUser = msg.userEmail === userEmail;
+                        const keyId =
+                          msg.id ?? `${selectedTopicId}-reply-${idx}`;
+                        return (
+                          <Box
+                            key={keyId}
+                            ref={(el: HTMLDivElement | null) => {
+                              messageRefs.current[keyId] = el;
+                            }}
+                            sx={{
+                              mb: 2,
+                              display: "flex",
+                              gap: 1.5,
+                              alignItems: "flex-start",
+                            }}
+                          >
+                            {/* Avatar */}
+                            <Avatar
+                              sx={{
+                                width: 32,
+                                height: 32,
+                                bgcolor: getAvatarColor(msg.userEmail),
+                                fontSize: "0.8rem",
+                                flexShrink: 0,
+                              }}
+                            >
+                              {msg.displayName.charAt(0).toUpperCase()}
+                            </Avatar>
+
+                            {/* Message Content */}
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                              {/* Name and timestamp */}
+                              <Box
+                                sx={{
+                                  display: "flex",
+                                  alignItems: "baseline",
+                                  gap: 1,
+                                  mb: 0.5,
+                                }}
+                              >
+                                <Typography
+                                  variant="body2"
+                                  fontWeight={600}
+                                  sx={{
+                                    color: isCurrentUser
+                                      ? "primary.main"
+                                      : "text.primary",
+                                  }}
+                                >
+                                  {msg.displayName}
+                                  {isCurrentUser && (
+                                    <Typography
+                                      component="span"
+                                      variant="caption"
+                                      color="text.secondary"
+                                      sx={{ ml: 0.5 }}
+                                    >
+                                      (You)
+                                    </Typography>
+                                  )}
+                                </Typography>
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                >
+                                  {formatTime(msg.timestamp)}
+                                </Typography>
+                              </Box>
+
+                              {/* Message bubble - transparent/natural */}
+                              <Box
+                                sx={{
+                                  px: 1.5,
+                                  py: 1,
+                                  bgcolor: "transparent",
+                                  borderRadius: 0,
+                                  position: "relative",
+                                }}
+                              >
+                                {msg.imageUrl && (
+                                  <Box
+                                    sx={{
+                                      mb: msg.message ? 1 : 0,
+                                      maxWidth: "400px",
+                                      borderRadius: 0,
+                                      overflow: "hidden",
+                                      cursor: "pointer",
+                                      border: 1,
+                                      borderColor: "divider",
+                                      "&:hover": { opacity: 0.9 },
+                                    }}
+                                    onClick={() =>
+                                      window.open(msg.imageUrl!, "_blank")
+                                    }
+                                  >
+                                    <img
+                                      src={msg.imageUrl}
+                                      alt="Shared image"
+                                      loading="lazy"
+                                      style={{
+                                        width: "100%",
+                                        height: "auto",
+                                        display: "block",
+                                      }}
+                                    />
+                                  </Box>
+                                )}
+                                {msg.message && (
+                                  <>
+                                    {editingMessageId === msg.id ? (
+                                      <Box
+                                        sx={{
+                                          display: "flex",
+                                          gap: 1,
+                                          alignItems: "flex-start",
+                                        }}
+                                      >
+                                        <TextField
+                                          fullWidth
+                                          multiline
+                                          maxRows={6}
+                                          value={editContent}
+                                          onChange={(e) =>
+                                            setEditContent(e.target.value)
+                                          }
+                                          autoFocus
+                                          size="small"
+                                          sx={{ bgcolor: "background.paper" }}
+                                        />
+                                        <IconButton
+                                          size="small"
+                                          color="primary"
+                                          onClick={() =>
+                                            saveEditedMessage(msg.id!)
+                                          }
+                                        >
+                                          <CheckIcon fontSize="small" />
+                                        </IconButton>
+                                        <IconButton
+                                          size="small"
+                                          onClick={cancelEditing}
+                                        >
+                                          <CloseIcon fontSize="small" />
+                                        </IconButton>
+                                      </Box>
+                                    ) : (
+                                      <>
+                                        <Box
+                                          sx={{
+                                            display: "flex",
+                                            alignItems: "flex-start",
+                                            gap: 1,
+                                          }}
+                                        >
+                                          <Typography
+                                            variant="body2"
+                                            sx={{
+                                              whiteSpace: "pre-wrap",
+                                              wordBreak: "break-word",
+                                              lineHeight: 1.6,
+                                              color: "text.primary",
+                                              flex: 1,
+                                            }}
+                                          >
+                                            {msg.message}
+                                          </Typography>
+                                          {canEditMessage(msg) && (
+                                            <IconButton
+                                              size="small"
+                                              onClick={() =>
+                                                startEditingMessage(msg)
+                                              }
+                                              sx={{
+                                                opacity: 0.6,
+                                                "&:hover": { opacity: 1 },
+                                              }}
+                                            >
+                                              <EditIcon sx={{ fontSize: 16 }} />
+                                            </IconButton>
+                                          )}
+                                        </Box>
+                                        {msg.edited && (
+                                          <Typography
+                                            variant="caption"
+                                            sx={{
+                                              display: "block",
+                                              mt: 0.5,
+                                              fontSize: "0.7rem",
+                                              fontStyle: "italic",
+                                              opacity: 0.7,
+                                            }}
+                                          >
+                                            (edited)
+                                          </Typography>
+                                        )}
+                                      </>
+                                    )}
+                                  </>
+                                )}
+                              </Box>
+                            </Box>
+                          </Box>
+                        );
+                      })
+                    )}
+                  </Box>
+                  <div ref={messagesEndRef} />
+                </Box>
+              );
+            })()
+          ) : (
+            // Show all topics overview (no topic selected)
+            <Box sx={{ maxWidth: 900, mx: "auto", width: "100%" }}>
+              {sortedTopicIds.map((tid) => {
+                const thread = (topicThreads as any)[tid] as Message[];
+                const root = thread[0];
+                const topicType = getMessageType(root);
+                const replyCount = thread.length - 1;
+                return (
+                  <Paper
+                    key={tid}
+                    elevation={0}
+                    onClick={() => {
+                      setSelectedTopicId(root.id ?? tid);
+                      setTimeout(() => inputRef.current?.focus(), 0);
+                    }}
+                    sx={{
+                      mb: 2,
+                      p: 2,
+                      border: 1,
+                      borderColor: "divider",
+                      borderRadius: 0,
+                      cursor: "pointer",
+                      transition: "all 0.2s ease",
+                      "&:hover": {
+                        borderColor: "primary.main",
+                        bgcolor: "action.hover",
+                        transform: "translateY(-2px)",
+                        boxShadow: 2,
+                      },
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: 1.5,
+                      }}
+                    >
+                      <Avatar
+                        sx={{
+                          width: 40,
+                          height: 40,
+                          bgcolor: getAvatarColor(root.userEmail),
+                        }}
+                      >
+                        {root.displayName.charAt(0).toUpperCase()}
+                      </Avatar>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Box
                           sx={{
-                            position: "absolute",
-                            top: -8,
-                            right: isCurrentUser ? undefined : -32,
-                            left: isCurrentUser ? -32 : undefined,
-                            opacity: 0,
-                            transition: "opacity 0.2s",
-                            bgcolor: "background.paper",
-                            border: 1,
-                            borderColor: "divider",
-                            "&:hover": {
-                              bgcolor: "action.hover",
-                            },
-                            width: 28,
-                            height: 28,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 1,
+                            mb: 0.5,
                           }}
                         >
-                          <ReplyIcon sx={{ fontSize: 16 }} />
-                        </IconButton>
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              px: 1,
+                              py: 0.25,
+                              borderRadius: 0,
+                              bgcolor:
+                                topicType === "question"
+                                  ? "warning.main"
+                                  : "info.main",
+                              color:
+                                topicType === "question"
+                                  ? "warning.contrastText"
+                                  : "info.contrastText",
+                              fontWeight: 700,
+                              letterSpacing: 0.5,
+                              textTransform: "uppercase",
+                            }}
+                          >
+                            {topicType === "question" ? "Q" : "INFO"}
+                          </Typography>
+                          <Typography variant="body2" fontWeight={600}>
+                            {root.displayName}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            • {formatTime(root.timestamp)}
+                          </Typography>
+                        </Box>
+                        <Typography
+                          variant="body1"
+                          sx={{
+                            fontWeight: 500,
+                            mb: 0.5,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                          }}
+                        >
+                          {root.message}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {replyCount === 0
+                            ? "No replies yet"
+                            : `${replyCount} ${
+                                replyCount === 1 ? "reply" : "replies"
+                              }`}
+                        </Typography>
                       </Box>
                     </Box>
-                  </Box>
+                  </Paper>
                 );
               })}
-              <div ref={messagesEndRef} />
             </Box>
           )}
         </Box>
+
+        {/* Back to Topics Button */}
+        {selectedTopicId && (
+          <Paper
+            elevation={0}
+            sx={{
+              px: 2,
+              py: 1.5,
+              borderTop: 1,
+              borderBottom: 1,
+              borderColor: "divider",
+              bgcolor: "background.paper",
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+                cursor: "pointer",
+                transition: "color 0.2s",
+                "&:hover": { color: "primary.main" },
+              }}
+              onClick={() => setSelectedTopicId(null)}
+            >
+              <ArrowBackIcon fontSize="small" />
+              <Typography variant="body2" fontWeight={500}>
+                Back to all topics
+              </Typography>
+            </Box>
+          </Paper>
+        )}
 
         {/* Reply Bar */}
         {replyingTo && (
@@ -1062,6 +1653,7 @@ export default function CommunityChat({
             borderTop: 1,
             borderColor: "divider",
             bgcolor: "background.paper",
+            pb: "calc(16px + env(safe-area-inset-bottom))",
           }}
         >
           <Box sx={{ display: "flex", gap: 1, alignItems: "flex-end" }}>
@@ -1087,13 +1679,31 @@ export default function CommunityChat({
               <AttachFileIcon />
             </IconButton>
 
+            {/* Compose mode toggle */}
+            <ToggleButtonGroup
+              value={composeMode}
+              exclusive
+              size="small"
+              onChange={(_, v) => {
+                if (v) setComposeMode(v);
+              }}
+              sx={{ alignSelf: "flex-end" }}
+            >
+              <ToggleButton value="auto">Auto</ToggleButton>
+              <ToggleButton value="question">Question</ToggleButton>
+              <ToggleButton value="info">Info</ToggleButton>
+            </ToggleButtonGroup>
+
             <TextField
+              inputRef={inputRef}
               fullWidth
               placeholder={
                 imagePreview
                   ? "Add a caption (optional)..."
                   : replyingTo
-                  ? "Type your reply..."
+                  ? "Reply to this message..."
+                  : selectedTopicId
+                  ? "Reply to this topic..."
                   : "Type a message or paste an image..."
               }
               value={input}
@@ -1144,6 +1754,337 @@ export default function CommunityChat({
           </Box>
         </Paper>
       </Box>
+
+      {/* Topics Panel - RIGHT SIDE (hidden on mobile, Drawer used) */}
+      {!isMobile && (
+        <Paper
+          elevation={0}
+          sx={{
+            width: questionsWidth,
+            minWidth: 240,
+            maxWidth: 500,
+            borderLeft: 1,
+            borderColor: "divider",
+            display: "flex",
+            flexDirection: "column",
+            bgcolor: "background.paper",
+            position: "relative",
+            flexShrink: 0,
+            transition: isResizingQuestions ? "none" : "width 0.2s ease",
+          }}
+        >
+          <Box
+            sx={{
+              p: 2,
+              borderBottom: 1,
+              borderColor: "divider",
+            }}
+          >
+            <Typography variant="subtitle1" fontWeight={600}>
+              Topics
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {sortedTopicIds.length} total
+            </Typography>
+          </Box>
+
+          <List sx={{ flexGrow: 1, overflowY: "auto", p: 0 }}>
+            {sortedTopicIds.length === 0 ? (
+              <Box sx={{ p: 3, textAlign: "center" }}>
+                <Typography variant="body2" color="text.secondary">
+                  No topics yet
+                </Typography>
+              </Box>
+            ) : (
+              sortedTopicIds.map((tid, i) => {
+                const thread = (topicThreads as any)[tid] as Message[];
+                const q = thread[0];
+                const key = q.id ?? i;
+                const tType = getMessageType(q);
+                return (
+                  <ListItem key={key} disablePadding>
+                    <ListItemButton
+                      onClick={() => {
+                        setSelectedTopicId(q.id ?? tid);
+                      }}
+                      sx={{ alignItems: "flex-start", py: 1.25 }}
+                    >
+                      <ListItemAvatar>
+                        <Avatar
+                          sx={{
+                            bgcolor: getAvatarColor(q.userEmail),
+                            width: 32,
+                            height: 32,
+                          }}
+                        >
+                          {q.displayName.charAt(0).toUpperCase()}
+                        </Avatar>
+                      </ListItemAvatar>
+                      <ListItemText
+                        primary={
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1,
+                            }}
+                          >
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                px: 0.75,
+                                py: 0.25,
+                                borderRadius: 1,
+                                bgcolor:
+                                  tType === "question"
+                                    ? "warning.main"
+                                    : "info.main",
+                                color:
+                                  tType === "question"
+                                    ? "warning.contrastText"
+                                    : "info.contrastText",
+                                fontWeight: 700,
+                                letterSpacing: 0.5,
+                              }}
+                            >
+                              {tType === "question" ? "Q" : "Info"}
+                            </Typography>
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                fontWeight: 700,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                flex: 1,
+                              }}
+                            >
+                              {q.message}
+                            </Typography>
+                          </Box>
+                        }
+                        secondary={
+                          <Typography variant="caption" color="text.secondary">
+                            {thread.length - 1} repl
+                            {thread.length - 1 === 1 ? "y" : "ies"} •{" "}
+                            {q.displayName} • {formatTime(q.timestamp)}
+                          </Typography>
+                        }
+                      />
+                    </ListItemButton>
+                  </ListItem>
+                );
+              })
+            )}
+          </List>
+
+          {/* Resize Handle (left edge of panel) */}
+          <Box
+            onMouseDown={handleMouseDownQuestions}
+            sx={{
+              position: "absolute",
+              top: 0,
+              left: -4,
+              width: 8,
+              height: "100%",
+              cursor: "col-resize",
+              zIndex: 10,
+              transition: "background-color 0.2s",
+              "&:hover": {
+                bgcolor: "primary.main",
+              },
+              "&:active": {
+                bgcolor: "primary.dark",
+              },
+            }}
+          >
+            <Box
+              sx={{
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+                width: 4,
+                height: 40,
+                borderRadius: 2,
+                bgcolor: isResizingQuestions ? "primary.main" : "transparent",
+                transition: "background-color 0.2s",
+              }}
+            />
+          </Box>
+        </Paper>
+      )}
+
+      {/* Mobile Drawers */}
+      {isMobile && (
+        <>
+          <Drawer
+            open={openMembersDrawer}
+            onClose={() => setOpenMembersDrawer(false)}
+            PaperProps={{
+              sx: { width: Math.min(320, window.innerWidth - 56) },
+            }}
+          >
+            <Box
+              sx={{
+                width: 1,
+                height: 1,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              {/* Reuse Members sidebar content */}
+              {/* We embed a minimal version: */}
+              <Box sx={{ p: 2, borderBottom: 1, borderColor: "divider" }}>
+                <Typography variant="subtitle1" fontWeight={600}>
+                  Members
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {onlineUsers.length} online
+                </Typography>
+              </Box>
+              <List sx={{ flexGrow: 1, overflowY: "auto", p: 0 }}>
+                {onlineUsers.map((user) => (
+                  <ListItem key={user.email}>
+                    <ListItemAvatar>
+                      <Avatar sx={{ bgcolor: getAvatarColor(user.email) }}>
+                        {user.displayName.charAt(0).toUpperCase()}
+                      </Avatar>
+                    </ListItemAvatar>
+                    <ListItemText
+                      primary={user.displayName}
+                      secondary={user.email}
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </Box>
+          </Drawer>
+          <Drawer
+            anchor="right"
+            open={openTopicsDrawer}
+            onClose={() => setOpenTopicsDrawer(false)}
+            PaperProps={{
+              sx: { width: Math.min(360, window.innerWidth - 56) },
+            }}
+          >
+            <Box
+              sx={{
+                width: 1,
+                height: 1,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <Box sx={{ p: 2, borderBottom: 1, borderColor: "divider" }}>
+                <Typography variant="subtitle1" fontWeight={600}>
+                  Topics
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {sortedTopicIds.length} total
+                </Typography>
+              </Box>
+              <List sx={{ flexGrow: 1, overflowY: "auto", p: 0 }}>
+                {sortedTopicIds.map((tid, i) => {
+                  const thread = (topicThreads as any)[tid] as Message[];
+                  const q = thread[0];
+                  const key = q.id ?? i;
+                  const tType = getMessageType(q);
+                  return (
+                    <ListItem key={key} disablePadding>
+                      <ListItemButton
+                        onClick={() => {
+                          setSelectedTopicId(q.id ?? tid);
+                          setOpenTopicsDrawer(false);
+                        }}
+                        sx={{ alignItems: "flex-start", py: 1.25 }}
+                      >
+                        <ListItemAvatar>
+                          <Avatar sx={{ bgcolor: getAvatarColor(q.userEmail) }}>
+                            {q.displayName.charAt(0).toUpperCase()}
+                          </Avatar>
+                        </ListItemAvatar>
+                        <ListItemText
+                          primary={
+                            <Box
+                              sx={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 1,
+                              }}
+                            >
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  px: 0.75,
+                                  py: 0.25,
+                                  borderRadius: 1,
+                                  bgcolor:
+                                    tType === "question"
+                                      ? "warning.main"
+                                      : "info.main",
+                                  color:
+                                    tType === "question"
+                                      ? "warning.contrastText"
+                                      : "info.contrastText",
+                                  fontWeight: 700,
+                                  letterSpacing: 0.5,
+                                }}
+                              >
+                                {" "}
+                                {tType === "question" ? "Q" : "Info"}{" "}
+                              </Typography>
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  fontWeight: 700,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                  flex: 1,
+                                }}
+                              >
+                                {q.message}
+                              </Typography>
+                            </Box>
+                          }
+                          secondary={
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              {thread.length - 1} repl
+                              {thread.length - 1 === 1 ? "y" : "ies"} •{" "}
+                              {q.displayName} • {formatTime(q.timestamp)}
+                            </Typography>
+                          }
+                        />
+                      </ListItemButton>
+                    </ListItem>
+                  );
+                })}
+              </List>
+            </Box>
+          </Drawer>
+        </>
+      )}
+
+      {/* Snackbar for error/success messages */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
