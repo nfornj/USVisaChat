@@ -34,17 +34,48 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Visa Platform API",
     description="Modular API for visa conversations, AI search, and community chat",
-    version="2.0.0"
+    version="2.0.0",
+    docs_url="/docs" if os.getenv("ENVIRONMENT", "development") == "development" else None,  # Disable docs in production
+    redoc_url=None  # Disable ReDoc
 )
 
-# Add CORS middleware
+# Add CORS middleware (secure configuration)
+import os
+
+# Get allowed origins from environment (comma-separated)
+allowed_origins_str = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:3000,http://localhost:8000,http://127.0.0.1:8000"  # Default for development
+)
+allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]
+
+logger.info(f"🔒 CORS allowed origins: {allowed_origins}")
+
+# Import security middleware
+from api.security_middleware import (
+    SecurityHeadersMiddleware,
+    RateLimitMiddleware,
+    RequestSizeLimitMiddleware,
+    InputValidationMiddleware
+)
+
+# Add security middleware (order matters!)
+app.add_middleware(SecurityHeadersMiddleware)  # Security headers
+app.add_middleware(RateLimitMiddleware)  # Rate limiting
+app.add_middleware(RequestSizeLimitMiddleware, max_size=10 * 1024 * 1024)  # 10MB limit
+app.add_middleware(InputValidationMiddleware)  # Input validation
+
+# Add CORS middleware (must be last)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,  # Restricted to specific domains
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Specific methods only
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],  # Specific headers
+    max_age=3600,  # Cache preflight requests for 1 hour
 )
+
+logger.info("✅ Security middleware enabled: headers, rate limiting, input validation, request size limits")
 
 # Global service instances
 vector_processor = None

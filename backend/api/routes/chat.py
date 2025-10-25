@@ -127,21 +127,50 @@ async def upload_image(
 
 # WebSocket endpoint (registered separately in main.py due to different decorator)
 async def websocket_chat_handler(websocket: WebSocket):
-    """WebSocket endpoint for real-time community chat with room isolation"""
+    """WebSocket endpoint for real-time community chat with authentication"""
     # MUST accept connection FIRST before doing anything
     await websocket.accept()
     
-    # Now get parameters from query string
+    # Get parameters from query string
     query_params = dict(websocket.query_params)
     user_email = query_params.get("user_email", "")
     display_name = query_params.get("display_name", "")
     room_id = query_params.get("room_id", "general")
+    session_token = query_params.get("token", "")  # Get authentication token
     
-    logger.info(f"🔌 WebSocket connected: email={user_email}, name={display_name}, room={room_id}")
+    logger.info(f"🔌 WebSocket connection attempt: email={user_email}, room={room_id}")
     
+    # Validate required parameters
     if not user_email or not display_name:
         logger.error("❌ Missing user_email or display_name")
         await websocket.close(code=1008, reason="Missing required parameters")
+        return
+    
+    # Authenticate user with session token
+    if not session_token:
+        logger.error(f"❌ No authentication token provided for {user_email}")
+        await websocket.close(code=1008, reason="Authentication required")
+        return
+    
+    try:
+        # Verify session token
+        user = auth_db.get_user_by_session(session_token)
+        if not user or user['email'].lower() != user_email.lower():
+            logger.error(f"❌ Invalid or expired session for {user_email}")
+            await websocket.close(code=1008, reason="Invalid or expired session")
+            return
+        
+        # Check if user is banned
+        if auth_db.is_user_banned(user_email):
+            logger.error(f"❌ Banned user attempted to connect: {user_email}")
+            await websocket.close(code=1008, reason="User is banned")
+            return
+        
+        logger.info(f"✅ WebSocket authenticated: {user_email}")
+        
+    except Exception as e:
+        logger.error(f"❌ WebSocket authentication failed: {e}")
+        await websocket.close(code=1011, reason="Authentication error")
         return
     
     try:
