@@ -12,10 +12,10 @@ primary_region = 'iad'  # IAD (Ashburn, VA) - current region
   PYTHONUNBUFFERED = '1'
   ENVIRONMENT = 'production'
   
-  # MongoDB Configuration (use Fly secrets for credentials)
+  # MongoDB Configuration (use Fly secrets for MONGODB_URI with username/password)
   MONGODB_DATABASE = 'visa_community'
-  MONGODB_TLS_ENABLED = 'false'  # Fly.io handles TLS
-  MONGODB_AUTH_MECHANISM = 'MONGODB-X509'
+  MONGODB_TLS_ENABLED = 'true'
+  MONGODB_AUTH_MECHANISM = 'SCRAM-SHA-256'  # Standard username/password auth
   
   # LLM Configuration - use Groq for production
   LLM_PROVIDER = 'groq'
@@ -23,10 +23,6 @@ primary_region = 'iad'  # IAD (Ashburn, VA) - current region
   
   # Email Configuration
   EMAIL_MODE = 'mock'
-  
-  # Qdrant Configuration - using Fly.io app
-  QDRANT_HOST = 'qdrant.internal'  # Internal Fly.io DNS
-  QDRANT_PORT = '6333'
   
   # CORS Configuration
   ALLOWED_ORIGINS = 'https://usvisachat.fly.dev'  # Your actual domain
@@ -53,5 +49,5 @@ primary_region = 'iad'  # IAD (Ashburn, VA) - current region
   cpu_kind = 'shared'
   cpus = 4  # shared-cpu-4x:1gb (testing CPU vs RAM)
 
-# Note: Data storage handled by external services (MongoDB Atlas, Qdrant)
+# Note: Data storage handled by MongoDB Atlas
 # No persistent volumes needed for stateless web app

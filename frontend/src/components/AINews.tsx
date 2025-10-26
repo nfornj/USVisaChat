@@ -45,14 +45,17 @@ interface AINewsProps {
 export default function AINews({ onBackToTopics }: AINewsProps) {
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState<1 | 2>(1);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const fetchNews = async () => {
     setLoading(true);
+    setLoadingStep(1);
     setError(null);
 
     try {
+      // Step 1: Searching
       const response = await fetch("/api/ai-news", {
         method: "POST",
         headers: {
@@ -63,6 +66,9 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
           limit: 10,
         }),
       });
+
+      // Step 2: Processing (simulated - actual processing happens on backend)
+      setLoadingStep(2);
 
       if (!response.ok) {
         throw new Error("Failed to fetch news");
@@ -189,7 +195,7 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
           )}
         </Box>
 
-        {/* Loading State */}
+        {/* Enhanced Loading State with Agent Workflow */}
         {loading && (
           <Box
             sx={{
@@ -199,10 +205,72 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
               py: 8,
             }}
           >
-            <CircularProgress size={50} thickness={4} />
-            <Typography variant="body1" color="text.secondary" sx={{ mt: 3 }}>
-              Fetching latest H1B news from Perplexity...
-            </Typography>
+            <CircularProgress size={60} thickness={4} />
+            
+            {/* Step Indicators */}
+            <Box sx={{ mt: 4, textAlign: "center" }}>
+              {/* Step 1: Searching */}
+              <Box sx={{ mb: 3 }}>
+                <Stack direction="row" spacing={1} alignItems="center" justifyContent="center">
+                  <Box
+                    sx={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: "50%",
+                      bgcolor: loadingStep >= 1 ? "primary.main" : "action.disabled",
+                      color: "white",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "0.875rem",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {loadingStep > 1 ? "✓" : "1"}
+                  </Box>
+                  <Typography
+                    variant="body1"
+                    sx={{
+                      color: loadingStep >= 1 ? "text.primary" : "text.disabled",
+                      fontWeight: loadingStep === 1 ? 600 : 400,
+                    }}
+                  >
+                    🔍 Searching for latest H1B news...
+                  </Typography>
+                </Stack>
+              </Box>
+
+              {/* Step 2: Analyzing */}
+              <Box>
+                <Stack direction="row" spacing={1} alignItems="center" justifyContent="center">
+                  <Box
+                    sx={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: "50%",
+                      bgcolor: loadingStep >= 2 ? "primary.main" : "action.disabled",
+                      color: "white",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "0.875rem",
+                      fontWeight: 600,
+                    }}
+                  >
+                    2
+                  </Box>
+                  <Typography
+                    variant="body1"
+                    sx={{
+                      color: loadingStep >= 2 ? "text.primary" : "text.disabled",
+                      fontWeight: loadingStep === 2 ? 600 : 400,
+                    }}
+                  >
+                    🤖 Analyzing articles and generating AI summaries...
+                  </Typography>
+                </Stack>
+              </Box>
+            </Box>
           </Box>
         )}
 

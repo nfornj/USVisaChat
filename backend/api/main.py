@@ -17,7 +17,7 @@ import uvicorn
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
 # Import route modules
-from api.routes import auth_router, chat_router, search_router, news_router
+from api.routes import auth_router, chat_router, search_router, news_router, test_router
 from api.routes.chat import websocket_chat_handler
 from api.routes.search import init_search_services
 from api.routes.news import init_news_service
@@ -125,6 +125,7 @@ app.include_router(auth_router)
 app.include_router(chat_router)
 app.include_router(search_router)
 app.include_router(news_router)
+app.include_router(test_router)
 
 
 # WebSocket endpoint (must be registered directly on app)
