@@ -42,5 +42,8 @@ dependencies = [
 ]
 
 [tool.uv]
-# Use default PyPI index for better compatibility
+# Prefer CPU-only PyTorch for Docker compatibility
 index-strategy = "unsafe-best-match"
+extra-index-url = [
+    "https://download.pytorch.org/whl/cpu"
+]

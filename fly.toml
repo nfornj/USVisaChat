@@ -49,9 +49,9 @@ primary_region = 'iad'  # IAD (Ashburn, VA) - current region
     type = 'http'
 
 [[vm]]
-  memory = '2gb'  # Increased for numpy/torch dependencies
+  memory = '1gb'
   cpu_kind = 'shared'
-  cpus = 1
+  cpus = 4  # shared-cpu-4x:1gb (testing CPU vs RAM)
 
 # Note: Data storage handled by external services (MongoDB Atlas, Qdrant)
 # No persistent volumes needed for stateless web app
