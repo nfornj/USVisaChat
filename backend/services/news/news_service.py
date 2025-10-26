@@ -73,15 +73,19 @@ class NewsService:
                 logger.warning("Perplexity client not initialized")
                 return None
             
-            # Default comprehensive H1B/immigration query - focused on BREAKING and LATEST news
+            # Default comprehensive H1B/immigration query - focused on 2024-2025 updates
             if not query:
+                current_year = datetime.now().year
                 query = (
-                    "What are the latest breaking news and important updates about H1B visa, "
-                    "green card processing, USCIS policy changes, visa bulletin updates, "
-                    "I-140 I-485 processing times, premium processing changes, EB-2 EB-3 priority dates, "
-                    "H1B lottery results, visa denial rates, consulate appointment availability, "
-                    "H-4 EAD work authorization updates in the past 7 days? "
-                    "Include official announcements and critical changes affecting visa applicants."
+                    f"What are the latest H1B visa and immigration news updates for {current_year}-{current_year + 1}? "
+                    f"Focus on: H1B visa policy changes {current_year}, H1B cap registration and lottery results {current_year}, "
+                    f"H1B stamping appointment availability, H1B premium processing updates, "
+                    f"visa bulletin priority dates for {current_year}, green card processing times, "
+                    f"I-140 and I-485 filing updates, USCIS fee changes {current_year}, "
+                    f"H-4 EAD work authorization news, EB-2 and EB-3 backlogs {current_year}, "
+                    f"consulate visa interview experiences, new immigration regulations {current_year}. "
+                    "Include only recent news from the past 14 days with official sources like USCIS.gov, "
+                    "State Department, immigration law firms, and major news outlets."
                 )
             
             logger.info(f"🔍 Fetching H1B news from Perplexity using SDK (query: {len(query)} chars)...")

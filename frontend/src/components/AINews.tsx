@@ -11,13 +11,11 @@ import {
   Alert,
   Grid,
   Container,
-  IconButton,
   Stack,
   Fade,
 } from "@mui/material";
 import {
   OpenInNew as OpenInNewIcon,
-  Refresh as RefreshIcon,
   AutoAwesome as AutoAwesomeIcon,
   Schedule as ScheduleIcon,
   Article as ArticleIcon,
@@ -161,30 +159,11 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
               {lastUpdated && (
                 <Chip
                   icon={<ScheduleIcon sx={{ fontSize: 14 }} />}
-                  label={`Updated ${getTimeAgo(lastUpdated.toISOString())}`}
+                  label={`Last updated ${getTimeAgo(lastUpdated.toISOString())}`}
                   size="small"
                   sx={{ bgcolor: "background.paper", fontWeight: 500 }}
                 />
               )}
-              <IconButton
-                onClick={fetchNews}
-                disabled={loading}
-                size="small"
-                sx={{
-                  bgcolor: "primary.main",
-                  color: "white",
-                  width: 32,
-                  height: 32,
-                  "&:hover": {
-                    bgcolor: "primary.dark",
-                  },
-                  "&:disabled": {
-                    bgcolor: "action.disabledBackground",
-                  },
-                }}
-              >
-                <RefreshIcon fontSize="small" />
-              </IconButton>
             </Stack>
           </Box>
 
@@ -411,15 +390,8 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
               No news articles available
             </Typography>
             <Typography variant="body2" color="text.secondary" mb={3}>
-              Click the refresh button to fetch the latest H1B visa news
+              News will be automatically refreshed every 24 hours
             </Typography>
-            <Button
-              variant="contained"
-              startIcon={<RefreshIcon />}
-              onClick={fetchNews}
-            >
-              Refresh News
-            </Button>
           </Box>
         )}
       </Container>

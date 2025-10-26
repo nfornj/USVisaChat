@@ -33,8 +33,8 @@ const subtleShine = keyframes`
   }
 `;
 
-// Eye-catching shine animation for AI News button
-const brightShine = keyframes`
+// Subtle text shimmer animation for AI News text
+const textShimmer = keyframes`
   0% {
     background-position: -200% center;
   }
@@ -112,7 +112,7 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
           onClick={() => onTabChange('topics')}
         />
 
-        {/* AI News Button - Always Animated */}
+        {/* AI News Button - Subtle Text Shimmer */}
         <Chip
           icon={<ArticleIcon />}
           label="AI News"
@@ -121,36 +121,32 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
             mr: 2,
             cursor: 'pointer',
             transition: 'all 0.3s ease',
-            border: '2px solid',
-            overflow: 'hidden',
+            border: '1px solid',
             position: 'relative',
-            // Always animate - regardless of active state
-            background: 'linear-gradient(90deg, #ec4899 0%, #f472b6 50%, #ec4899 100%)',
-            backgroundSize: '200% 100%',
-            animation: `${brightShine} 2s linear infinite`,
-            borderColor: '#fde047',
-            color: '#fff',
-            '&::before': {
-              content: '""',
-              position: 'absolute',
-              top: 0,
-              left: '-100%',
-              width: '100%',
-              height: '100%',
-              background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent)',
-              animation: `${brightShine} 2s linear infinite`,
+            // Shimmer effect on text only
+            '& .MuiChip-label': {
+              background: 'linear-gradient(90deg, rgba(255,255,255,0.8) 0%, rgba(255,255,255,1) 50%, rgba(255,255,255,0.8) 100%)',
+              backgroundClip: 'text',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundSize: '200% auto',
+              animation: `${textShimmer} 3s linear infinite`,
             },
             ...(activeTab === 'news'
               ? {
-                  boxShadow: '0 0 30px rgba(253, 224, 71, 0.5)',
+                  bgcolor: 'rgba(255, 255, 255, 0.3)',
+                  borderColor: 'rgba(255, 255, 255, 0.4)',
+                  boxShadow: '0 0 15px rgba(255, 255, 255, 0.2)',
+                  animation: `${subtleShine} 3s ease-in-out infinite`,
                   '&:hover': {
-                    boxShadow: '0 0 35px rgba(253, 224, 71, 0.6)',
+                    bgcolor: 'rgba(255, 255, 255, 0.35)',
                   },
                 }
               : {
-                  boxShadow: '0 0 20px rgba(253, 224, 71, 0.3)',
+                  bgcolor: 'rgba(255, 255, 255, 0.2)',
+                  borderColor: 'rgba(255, 255, 255, 0.3)',
                   '&:hover': {
-                    boxShadow: '0 0 25px rgba(253, 224, 71, 0.4)',
+                    bgcolor: 'rgba(255, 255, 255, 0.25)',
                   },
                 }),
           }}

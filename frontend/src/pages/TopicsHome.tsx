@@ -7,6 +7,14 @@ import {
   ArrowRight,
   Zap,
   Sparkles,
+  Stamp,
+  DollarSign,
+  FileText,
+  GraduationCap,
+  Clock,
+  MessageSquare,
+  Calendar,
+  CheckCircle,
 } from "lucide-react";
 import { useTheme } from "@mui/material/styles";
 import { Box } from "@mui/material";
@@ -20,7 +28,7 @@ interface Topic {
   lastActive: string;
   trend: "hot" | "rising" | "steady";
   gradient: string;
-  icon: string;
+  icon: React.ReactNode;
 }
 
 interface TopicsHomeProps {
@@ -41,7 +49,7 @@ const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
       lastActive: "2m ago",
       trend: "hot",
       gradient: "from-orange-400 to-red-500",
-      icon: "🔥",
+      icon: <Stamp className="w-full h-full" />,
     },
     {
       id: "h1b-fee-hike",
@@ -52,7 +60,7 @@ const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
       lastActive: "5m ago",
       trend: "hot",
       gradient: "from-purple-400 to-pink-500",
-      icon: "⚡",
+      icon: <DollarSign className="w-full h-full" />,
     },
     {
       id: "dropbox-eligibility",
@@ -63,7 +71,7 @@ const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
       lastActive: "8m ago",
       trend: "rising",
       gradient: "from-blue-400 to-cyan-500",
-      icon: "📋",
+      icon: <FileText className="w-full h-full" />,
     },
     {
       id: "f1-visa",
@@ -74,7 +82,7 @@ const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
       lastActive: "12m ago",
       trend: "steady",
       gradient: "from-green-400 to-emerald-500",
-      icon: "🎓",
+      icon: <GraduationCap className="w-full h-full" />,
     },
     {
       id: "administrative-processing",
@@ -85,7 +93,7 @@ const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
       lastActive: "15m ago",
       trend: "rising",
       gradient: "from-yellow-400 to-orange-500",
-      icon: "⏳",
+      icon: <Clock className="w-full h-full" />,
     },
     {
       id: "interview-experience",
@@ -96,7 +104,7 @@ const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
       lastActive: "18m ago",
       trend: "steady",
       gradient: "from-indigo-400 to-purple-500",
-      icon: "💬",
+      icon: <MessageSquare className="w-full h-full" />,
     },
     {
       id: "visa-appointment",
@@ -107,7 +115,7 @@ const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
       lastActive: "22m ago",
       trend: "steady",
       gradient: "from-pink-400 to-rose-500",
-      icon: "📅",
+      icon: <Calendar className="w-full h-full" />,
     },
     {
       id: "documents-checklist",
@@ -118,7 +126,7 @@ const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
       lastActive: "25m ago",
       trend: "steady",
       gradient: "from-cyan-400 to-blue-500",
-      icon: "✅",
+      icon: <CheckCircle className="w-full h-full" />,
     },
   ]);
 
@@ -294,11 +302,21 @@ const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
               {/* Topic Header */}
               <div className="flex items-start justify-between mb-4">
                 <div
-                  className={`text-4xl p-3 rounded-xl ${
-                    isDark ? "bg-white/10" : "bg-gray-100"
+                  className={`w-14 h-14 flex items-center justify-center rounded-xl transition-all duration-300 ${
+                    isDark 
+                      ? "bg-gradient-to-br from-white/20 to-white/10 text-white shadow-lg" 
+                      : "bg-gradient-to-br from-gray-100 to-gray-50 text-gray-800 shadow-md"
+                  } ${
+                    hoveredTopic === topic.id
+                      ? isDark
+                        ? "from-blue-500/30 to-purple-500/30"
+                        : "from-blue-50 to-purple-50"
+                      : ""
                   }`}
                 >
-                  {topic.icon}
+                  <div className="w-7 h-7">
+                    {topic.icon}
+                  </div>
                 </div>
                 {getTrendBadge(topic.trend)}
               </div>
@@ -380,11 +398,16 @@ const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
           transition={{ delay: 1 }}
           className="text-center mt-12"
         >
-          <p
-            className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}
-          >
-            💡 Click on any topic card to join the conversation
-          </p>
+          <div className="inline-flex items-center gap-2">
+            <div className={`w-5 h-5 ${isDark ? "text-yellow-400" : "text-yellow-500"}`}>
+              <Sparkles className="w-full h-full" />
+            </div>
+            <p
+              className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}
+            >
+              Click on any topic card to join the conversation
+            </p>
+          </div>
         </motion.div>
       </div>
     </Box>

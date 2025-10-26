@@ -35,6 +35,7 @@ import {
   Group as GroupIcon,
   FormatListBulleted as ListIcon,
 } from "@mui/icons-material";
+import { LOCAL_STORAGE_KEYS } from './config/constants';
 
 interface ReplyToMessage {
   id: string;
@@ -157,6 +158,14 @@ export default function CommunityChat({
 
   // WebSocket connection - reconnect when roomId changes
   useEffect(() => {
+    // Get session token from localStorage
+    const sessionToken = localStorage.getItem(LOCAL_STORAGE_KEYS.SESSION_TOKEN);
+    if (!sessionToken) {
+      console.error('No session token found - user must be logged in');
+      setIsConnecting(false);
+      return;
+    }
+    
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${
       window.location.host
@@ -164,7 +173,7 @@ export default function CommunityChat({
       userEmail
     )}&display_name=${encodeURIComponent(
       displayName
-    )}&room_id=${encodeURIComponent(roomId)}`;
+    )}&room_id=${encodeURIComponent(roomId)}&token=${encodeURIComponent(sessionToken)}`;
 
     console.log(
       "Connecting to WebSocket:",

@@ -39,16 +39,21 @@ async def get_ai_news(request: SearchRequest):
     try:
         # Try to get cached articles first
         cached = news_service.get_cached_articles(limit=request.limit or 10)
+        cache_status = news_service.get_cache_status()
         
-        if cached["has_articles"]:
-            logger.info(f"Returning {cached['total']} cached articles")
+        # Check if we have articles and they're fresh (< 24 hours old)
+        if cached["has_articles"] and cache_status["cache_age_hours"] < 24:
+            logger.info(f"✅ Returning {cached['total']} cached articles (age: {cache_status['cache_age_hours']:.1f}h)")
             return {
                 **cached,
                 "query": f"{request.query} H1B visa news latest updates 2024"
             }
         
-        # If no cache, fetch fresh data
-        logger.info("No cached articles found, fetching fresh data...")
+        # If cache is empty or older than 24 hours, refresh in background
+        if not cached["has_articles"]:
+            logger.info("🔄 No cached articles found, fetching fresh data...")
+        else:
+            logger.info(f"⏰ Cache is {cache_status['cache_age_hours']:.1f}h old (>24h), refreshing...")
         
         refresh_result = news_service.refresh_cache(force=True)
         

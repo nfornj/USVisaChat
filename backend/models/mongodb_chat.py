@@ -408,6 +408,116 @@ class MongoDBChatDatabase:
             logger.error(f"❌ Error getting stats: {e}")
             return {}
     
+    def delete_old_messages(self, days_old: int = 30, room_id: Optional[str] = None) -> Dict[str, int]:
+        """
+        Delete messages older than specified days (admin function)
+        
+        Args:
+            days_old: Delete messages older than this many days
+            room_id: Optional room filter. If None, deletes from all rooms
+        
+        Returns:
+            Dict with deleted count
+        """
+        try:
+            from datetime import timedelta
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_old)
+            
+            query = {'created_at': {'$lt': cutoff_date}}
+            if room_id:
+                query['room_id'] = room_id
+            
+            result = self.messages.delete_many(query)
+            deleted_count = result.deleted_count
+            
+            logger.info(f"✅ Deleted {deleted_count} messages older than {days_old} days" + 
+                       (f" from room {room_id}" if room_id else " from all rooms"))
+            
+            return {
+                'deleted': deleted_count,
+                'days_old': days_old,
+                'room_id': room_id
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error deleting old messages: {e}")
+            return {'deleted': 0, 'error': str(e)}
+    
+    def delete_room_messages(self, room_id: str, keep_last_n: int = 0) -> Dict[str, int]:
+        """
+        Delete all messages from a specific room (admin function)
+        
+        Args:
+            room_id: Room ID to clear
+            keep_last_n: Keep the last N messages (0 = delete all)
+        
+        Returns:
+            Dict with deleted count
+        """
+        try:
+            if keep_last_n > 0:
+                # Get IDs of messages to keep
+                messages_to_keep = self.messages.find(
+                    {'room_id': room_id}
+                ).sort('created_at', -1).limit(keep_last_n)
+                keep_ids = [msg['_id'] for msg in messages_to_keep]
+                
+                # Delete all except those to keep
+                result = self.messages.delete_many({
+                    'room_id': room_id,
+                    '_id': {'$nin': keep_ids}
+                })
+            else:
+                # Delete all messages in room
+                result = self.messages.delete_many({'room_id': room_id})
+            
+            deleted_count = result.deleted_count
+            logger.info(f"✅ Deleted {deleted_count} messages from room {room_id}")
+            
+            return {
+                'deleted': deleted_count,
+                'room_id': room_id,
+                'kept': keep_last_n
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error deleting room messages: {e}")
+            return {'deleted': 0, 'error': str(e)}
+    
+    def get_room_stats(self) -> List[Dict]:
+        """
+        Get statistics for all rooms (admin function)
+        
+        Returns:
+            List of room statistics
+        """
+        try:
+            pipeline = [
+                {'$match': {'deleted': False}},
+                {'$group': {
+                    '_id': '$room_id',
+                    'message_count': {'$sum': 1},
+                    'unique_users': {'$addToSet': '$user_email'},
+                    'oldest_message': {'$min': '$created_at'},
+                    'newest_message': {'$max': '$created_at'}
+                }},
+                {'$project': {
+                    'room_id': '$_id',
+                    'message_count': 1,
+                    'user_count': {'$size': '$unique_users'},
+                    'oldest_message': 1,
+                    'newest_message': 1,
+                    '_id': 0
+                }}
+            ]
+            
+            results = list(self.messages.aggregate(pipeline))
+            return results
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting room stats: {e}")
+            return []
+    
     def _format_message(self, message_doc: Dict) -> Dict:
         """Format message document for API response"""
         formatted = {
