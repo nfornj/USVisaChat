@@ -847,20 +847,8 @@ export default function CommunityChat({
                             )}
                           </Box>
                         }
-                        secondary={
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            sx={{
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                              display: "block",
-                            }}
-                          >
-                            {user.email}
-                          </Typography>
-                        }
+                        // Do not show email addresses in member list for privacy
+                        secondary={null}
                       />
                     </ListItem>
                     {index < onlineUsers.length - 1 && (
@@ -1981,7 +1969,6 @@ export default function CommunityChat({
                     </ListItemAvatar>
                     <ListItemText
                       primary={user.displayName}
-                      secondary={user.email}
                     />
                   </ListItem>
                 ))}

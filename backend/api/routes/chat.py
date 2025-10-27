@@ -199,6 +199,12 @@ async def websocket_chat_handler(websocket: WebSocket):
             'display_name': display_name
         }
         
+        # Persist presence to DB for cross-machine accuracy
+        try:
+            chat_manager.db.db.update_presence(room_id, user_email, display_name, online=True) if hasattr(chat_manager.db, 'db') and hasattr(chat_manager.db.db, 'update_presence') else chat_manager.db.update_presence(room_id, user_email, display_name, online=True)
+        except Exception:
+            pass
+        
         # Send history
         history = chat_manager.db.get_recent_messages(limit=50, room_id=room_id)
         await websocket.send_json({

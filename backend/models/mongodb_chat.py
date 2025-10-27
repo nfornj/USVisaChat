@@ -22,6 +22,16 @@ class MongoDBChatDatabase:
         
         self.db = mongodb_client.db
         self.messages = self.db.messages
+        # Presence collection for online users across machines
+        self.presence = self.db.chat_presence
+
+        # Ensure indexes (idempotent)
+        try:
+            self.presence.create_index([('room_id', 1), ('email', 1)], unique=True)
+            self.presence.create_index([('online', 1)])
+            self.presence.create_index([('last_seen', 1)])
+        except Exception as e:
+            logger.warning(f"⚠️ Could not ensure presence indexes: {e}")
         
         logger.info("✅ MongoDB Chat Database initialized")
     
@@ -483,6 +493,47 @@ class MongoDBChatDatabase:
         except Exception as e:
             logger.error(f"❌ Error deleting room messages: {e}")
             return {'deleted': 0, 'error': str(e)}
+    
+    def update_presence(self, room_id: str, email: str, display_name: str, online: bool = True) -> None:
+        """Upsert user's presence record for a room"""
+        try:
+            now = datetime.now(timezone.utc)
+            self.presence.update_one(
+                {'room_id': room_id, 'email': email.lower().strip()},
+                {
+                    '$set': {
+                        'display_name': display_name,
+                        'online': online,
+                        'last_seen': now
+                    },
+                    '$setOnInsert': {
+                        'first_seen': now
+                    }
+                },
+                upsert=True
+            )
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to update presence for {email} in {room_id}: {e}")
+    
+    def get_online_count(self, room_id: str) -> int:
+        """Get online user count for a room from presence collection"""
+        try:
+            return self.presence.count_documents({'room_id': room_id, 'online': True})
+        except Exception:
+            return 0
+    
+    def get_presence_counts_map(self) -> Dict[str, int]:
+        """Get online counts per room using aggregation"""
+        try:
+            pipeline = [
+                {'$match': {'online': True}},
+                {'$group': {'_id': '$room_id', 'count': {'$sum': 1}}},
+                {'$project': {'room_id': '$_id', 'count': 1, '_id': 0}}
+            ]
+            results = list(self.presence.aggregate(pipeline))
+            return {r['room_id']: r['count'] for r in results}
+        except Exception:
+            return {}
     
     def get_room_stats(self) -> List[Dict]:
         """
