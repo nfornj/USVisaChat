@@ -4,7 +4,7 @@ Handles user authentication, verification codes, and session management
 """
 
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 
 from api.schemas import (
     AuthRequestCodeRequest,
@@ -23,8 +23,10 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 
 
 @router.post("/request-code", response_model=AuthRequestCodeResponse)
-async def request_verification_code(request: AuthRequestCodeRequest):
-    """Request a verification code to be sent to email"""
+async def request_verification_code(request: AuthRequestCodeRequest, background_tasks: BackgroundTasks):
+    """Request a verification code to be sent to email.
+    Sends the email in the background to avoid blocking the request.
+    """
     try:
         # Create or get user
         user = auth_db.create_or_get_user(request.email, request.display_name)
@@ -32,15 +34,17 @@ async def request_verification_code(request: AuthRequestCodeRequest):
         # Generate verification code
         code = auth_db.create_verification_code(user['id'], expires_in_minutes=10)
         
-        # Send email with code
-        email_sent = email_service.send_verification_code(request.email, code, request.display_name)
-        
-        if not email_sent:
-            raise HTTPException(status_code=500, detail="Failed to send verification email")
+        # Send email in the background for faster UX
+        background_tasks.add_task(
+            email_service.send_verification_code,
+            request.email,
+            code,
+            request.display_name or request.email.split('@')[0]
+        )
         
         return AuthRequestCodeResponse(
             success=True,
-            message=f"Verification code sent to {request.email}. Check your email (or server logs in DEV MODE). Code: {code}",
+            message=f"Verification code sent to {request.email}. Check your email (or server logs in DEV MODE).",
             user_id=user['id']
         )
     except Exception as e:

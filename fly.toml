@@ -30,9 +30,9 @@ primary_region = 'iad'  # IAD (Ashburn, VA) - current region
 [http_service]
   internal_port = 8000
   force_https = true
-  auto_stop_machines = 'suspend'  # Suspend when idle to save costs
+auto_stop_machines = false  # Keep at least one machine always running for fast auth/email
   auto_start_machines = true
-  min_machines_running = 0  # Allow scaling to zero
+  min_machines_running = 1  # Keep one warm instance to avoid cold starts
   processes = ['app']
 
   # Health checks
