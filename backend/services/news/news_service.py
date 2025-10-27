@@ -8,12 +8,16 @@ import os
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from perplexity import Perplexity
+import concurrent.futures
 
 from .news_utils import (
     generate_comprehensive_ai_summary,
     generate_short_title,
     get_fallback_image
 )
+from .article_scraper import scrape_with_fallback
+from models.news import news_model
+from config.prompts import get_perplexity_news_query
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +36,7 @@ class NewsService:
         """Initialize Perplexity client with API key from environment"""
         self.api_key = os.getenv("PERPLEXITY_API_KEY")
         self.client = None
+        self.news_model = news_model
         
         if self.api_key:
             try:
@@ -43,13 +48,8 @@ class NewsService:
         else:
             logger.warning("⚠️  PERPLEXITY_API_KEY not found in environment")
         
-        # Cache structure
-        self.cache = {
-            "articles": [],
-            "last_updated": None,
-            "last_api_fetch": None,
-            "is_fetching": False
-        }
+        # In-memory cache for last API fetch time only
+        self.last_api_fetch = None
     
     def fetch_news(self, query: Optional[str] = None, max_results: int = 15) -> Optional[List[Dict[str, Any]]]:
         """
@@ -64,8 +64,8 @@ class NewsService:
         """
         try:
             # Check rate limiting
-            if self.cache["last_api_fetch"]:
-                hours_since_fetch = (datetime.now() - self.cache["last_api_fetch"]).total_seconds() / 3600
+            if self.last_api_fetch:
+                hours_since_fetch = (datetime.now() - self.last_api_fetch).total_seconds() / 3600
                 if hours_since_fetch < self.MIN_FETCH_INTERVAL_HOURS:
                     logger.info(f"⏳ Perplexity API called {hours_since_fetch:.1f}h ago. Skipping (minimum {self.MIN_FETCH_INTERVAL_HOURS}h interval)")
                     return None
@@ -74,46 +74,46 @@ class NewsService:
                 logger.warning("Perplexity client not initialized")
                 return None
             
-            # Default comprehensive H1B/immigration query
+            # Get query from environment variable or use default
             if not query:
-                query = (
-                    "H1B visa breaking news updates green card processing EB-2 EB-3 "
-                    "priority dates PERM labor certification I-140 I-485 processing times "
-                    "USCIS policy changes premium processing delays RFE responses visa bulletin "
-                    "employment-based immigration OPT STEM extension cap gap H-4 EAD work authorization"
-                )
+                query = get_perplexity_news_query()
             
             logger.info(f"🔍 Fetching H1B news from Perplexity using SDK (query: {len(query)} chars)...")
             
-            # Use official SDK with search domains filter
+            # Use official SDK without domain filter for better results
             search = self.client.search.create(
                 query=query,
                 max_results=max_results,
-                max_tokens_per_page=2048,
-                search_domain_filter=[
-                    "immihelp.com",
-                    "redbus2us.com",
-                    "newsweek.com",
-                    "uscis.gov",
-                    "cnn.com",
-                    "bbc.com"
-                ]
+                max_tokens_per_page=2048
             )
             
             # Track successful API call
-            self.cache["last_api_fetch"] = datetime.now()
+            self.last_api_fetch = datetime.now()
             
             # Extract results from SDK response
             results = []
             if hasattr(search, 'results') and search.results:
-                for result in search.results:
-                    results.append({
+                # Debug: Log first result to see all available fields
+                if len(search.results) > 0:
+                    first_result = search.results[0]
+                    logger.info(f"🔍 DEBUG - Available fields in result: {dir(first_result)}")
+                    logger.info(f"🔍 DEBUG - Result dict: {first_result.__dict__ if hasattr(first_result, '__dict__') else 'No __dict__'}")
+                
+                for i, result in enumerate(search.results):
+                    result_data = {
                         'title': result.title if hasattr(result, 'title') else 'Untitled',
                         'content': result.content if hasattr(result, 'content') else result.snippet if hasattr(result, 'snippet') else '',
                         'url': result.url if hasattr(result, 'url') else '#',
                         'published_date': result.published_date if hasattr(result, 'published_date') else datetime.now().isoformat(),
                         'site': result.site if hasattr(result, 'site') else 'Immigration News'
-                    })
+                    }
+                    
+                    # Check for snapshot field
+                    if hasattr(result, 'snapshot'):
+                        result_data['snapshot'] = result.snapshot
+                        logger.info(f"📸 Found snapshot field in result {i}")
+                    
+                    results.append(result_data)
             
             logger.info(f"✅ Successfully fetched {len(results)} news articles from Perplexity SDK")
             return results
@@ -122,9 +122,61 @@ class NewsService:
             logger.error(f"Error fetching news from Perplexity SDK: {e}")
             return None
     
+    def _process_single_article(self, result: Dict[str, Any], index: int) -> Optional[Dict[str, Any]]:
+        """
+        Process a single article (used for parallel processing)
+        """
+        try:
+            original_title = result.get('title', f'H1B Visa News Update #{index+1}')
+            perplexity_content = result.get('content', result.get('snippet', ''))
+            snapshot = result.get('snapshot', '')  # Check for snapshot field
+            url = result.get('url', f'https://example.com/h1b-news/{index+1}')
+            published_at = result.get('published_date', datetime.now().isoformat())
+            source = result.get('site', 'Immigration News')
+            
+            # Try to get full article content (Priority: Snapshot > Scrape > Perplexity snippet)
+            if snapshot and len(snapshot) > len(perplexity_content):
+                logger.info(f"📸 Using snapshot for article {index}: {len(snapshot)} chars")
+                full_content = snapshot
+            else:
+                logger.info(f"🌐 Scraping full article {index} from URL: {url}")
+                # Reduced timeout to 5s per article for faster processing
+                from .article_scraper import scrape_article_content
+                full_content = scrape_article_content(url, timeout=5)
+                if not full_content or len(full_content) < 100:
+                    logger.warning(f"⚠️  Scraping failed, using Perplexity content for article {index}")
+                    full_content = perplexity_content
+            
+            # Generate SHORT title using Groq (with full content)
+            short_title = generate_short_title(original_title, full_content)
+            
+            # Generate AI summary (with full content)
+            ai_summary = generate_comprehensive_ai_summary(original_title, full_content)
+            
+            # Generate image topic for better images
+            image_topic = f"{original_title} immigration visa"
+            
+            article = {
+                "id": f"article-{index}",
+                "title": short_title,
+                "summary": full_content[:300] + "..." if len(full_content) > 300 else full_content,
+                "content": full_content,  # Store full scraped content
+                "url": url,
+                "publishedAt": published_at,
+                "source": source,
+                "imageUrl": get_fallback_image(image_topic, index),
+                "aiSummary": ai_summary,
+                "tags": ["H1B", "Visa", "Immigration", "Work Visa", "Tech Industry"]
+            }
+            return article
+            
+        except Exception as e:
+            logger.error(f"Error processing article {index}: {e}")
+            return None
+    
     def process_results(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Process Perplexity search results into article format with AI enhancements
+        Process Perplexity search results in PARALLEL for faster processing
         
         Args:
             results: Raw search results from Perplexity
@@ -136,41 +188,29 @@ class NewsService:
             return []
         
         articles = []
-        for i, result in enumerate(results[:12]):  # Limit to 12 articles
-            try:
-                original_title = result.get('title', f'H1B Visa News Update #{i+1}')
-                content = result.get('content', result.get('snippet', ''))
-                url = result.get('url', f'https://example.com/h1b-news/{i+1}')
-                published_at = result.get('published_date', datetime.now().isoformat())
-                source = result.get('site', 'Immigration News')
-                
-                # Generate SHORT title using Groq
-                short_title = generate_short_title(original_title, content)
-                
-                # Generate AI summary
-                ai_summary = generate_comprehensive_ai_summary(original_title, content)
-                
-                # Generate image topic for better images
-                image_topic = f"{original_title} immigration visa"
-                
-                article = {
-                    "id": f"article-{i}",
-                    "title": short_title,
-                    "summary": content[:300] + "..." if len(content) > 300 else content,
-                    "content": content,
-                    "url": url,
-                    "publishedAt": published_at,
-                    "source": source,
-                    "imageUrl": get_fallback_image(image_topic, i),
-                    "aiSummary": ai_summary,
-                    "tags": ["H1B", "Visa", "Immigration", "Work Visa", "Tech Industry"]
-                }
-                articles.append(article)
-                
-            except Exception as e:
-                logger.error(f"Error processing article {i}: {e}")
-                continue
+        results_to_process = results[:12]  # Limit to 12 articles
         
+        logger.info(f"🚀 Processing {len(results_to_process)} articles in parallel...")
+        
+        # Process articles in parallel using ThreadPoolExecutor (max 4 concurrent)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            future_to_index = {executor.submit(self._process_single_article, result, i): i 
+                             for i, result in enumerate(results_to_process)}
+            
+            for future in concurrent.futures.as_completed(future_to_index):
+                index = future_to_index[future]
+                try:
+                    article = future.result()
+                    if article:
+                        articles.append(article)
+                        logger.info(f"✅ Completed article {index + 1}/{len(results_to_process)}")
+                except Exception as e:
+                    logger.error(f"❌ Failed to process article {index}: {e}")
+        
+        # Sort articles by original index to maintain order
+        articles.sort(key=lambda x: int(x['id'].split('-')[1]))
+        
+        logger.info(f"✅ Successfully processed {len(articles)} articles")
         return articles
     
     def merge_articles_intelligently(
@@ -207,28 +247,31 @@ class NewsService:
     
     def get_cached_articles(self, limit: int = 10) -> Dict[str, Any]:
         """
-        Get cached articles with metadata
+        Get articles from MongoDB
         
         Args:
             limit: Maximum number of articles to return
         
         Returns:
-            Dictionary with articles and cache metadata
+            Dictionary with articles and metadata
         """
+        articles = self.news_model.get_articles(limit=limit)
+        latest_date = self.news_model.get_latest_article_date()
+        
         cache_age_hours = 0
-        if self.cache["last_updated"]:
+        if latest_date:
             cache_age_hours = round(
-                (datetime.now() - self.cache["last_updated"]).total_seconds() / 3600, 
+                (datetime.now() - latest_date).total_seconds() / 3600, 
                 1
             )
         
         return {
-            "articles": self.cache["articles"][:limit],
-            "total": len(self.cache["articles"][:limit]),
-            "timestamp": self.cache["last_updated"].isoformat() if self.cache["last_updated"] else datetime.now().isoformat(),
-            "source": "cache",
+            "articles": articles,
+            "total": len(articles),
+            "timestamp": latest_date.isoformat() if latest_date else datetime.now().isoformat(),
+            "source": "mongodb",
             "cache_age_hours": cache_age_hours,
-            "has_articles": len(self.cache["articles"]) > 0
+            "has_articles": len(articles) > 0
         }
     
     def is_cache_expired(self) -> bool:
@@ -241,21 +284,14 @@ class NewsService:
     
     def refresh_cache(self, force: bool = False) -> Dict[str, Any]:
         """
-        Refresh news cache from Perplexity
+        Refresh news from Perplexity and save to MongoDB
         
         Args:
-            force: Force refresh even if cache is not expired
+            force: Force refresh even if recently fetched
         
         Returns:
             Result dictionary with status and message
         """
-        if self.cache["is_fetching"]:
-            return {"success": False, "message": "News fetch already in progress", "status": "fetching"}
-        
-        if not force and not self.is_cache_expired():
-            return {"success": False, "message": "Cache is still fresh", "status": "cached"}
-        
-        self.cache["is_fetching"] = True
         logger.info("🔄 Refreshing news cache...")
         
         try:
@@ -265,27 +301,22 @@ class NewsService:
             if results:
                 new_articles = self.process_results(results)
                 if new_articles:
-                    # Merge with existing cache
-                    merged_articles = self.merge_articles_intelligently(
-                        new_articles,
-                        self.cache["articles"]
-                    )
-                    self.cache["articles"] = merged_articles
-                    self.cache["last_updated"] = datetime.now()
+                    # Save to MongoDB
+                    save_result = self.news_model.save_articles(new_articles)
                     
-                    new_count = len([
-                        a for a in new_articles 
-                        if a.get('url', '') not in {e.get('url', '') for e in self.cache["articles"]}
-                    ])
-                    
-                    logger.info(f"✅ Updated cache with {len(merged_articles)} total articles ({new_count} new)")
-                    
-                    return {
-                        "success": True,
-                        "message": f"Successfully refreshed cache with {len(merged_articles)} total articles ({new_count} new)",
-                        "status": "success",
-                        "article_count": len(merged_articles)
-                    }
+                    if save_result.get("success"):
+                        logger.info(f"✅ Saved {save_result['saved']} new articles to MongoDB")
+                        
+                        return {
+                            "success": True,
+                            "message": f"Successfully saved {save_result['saved']} new articles",
+                            "status": "success",
+                            "saved": save_result['saved'],
+                            "updated": save_result['updated'],
+                            "total_in_db": self.news_model.get_article_count()
+                        }
+                    else:
+                        return {"success": False, "message": "Failed to save to MongoDB", "status": "failed"}
                 else:
                     logger.warning("No articles processed from Perplexity data")
                     return {"success": False, "message": "No articles processed", "status": "failed"}
@@ -296,24 +327,25 @@ class NewsService:
         except Exception as e:
             logger.error(f"Error refreshing cache: {e}")
             return {"success": False, "message": f"Error: {str(e)}", "status": "error"}
-        finally:
-            self.cache["is_fetching"] = False
     
     def get_cache_status(self) -> Dict[str, Any]:
-        """Get current cache status"""
+        """Get current MongoDB cache status"""
+        article_count = self.news_model.get_article_count()
+        latest_date = self.news_model.get_latest_article_date()
+        
         cache_age_hours = 0
-        if self.cache["last_updated"]:
+        if latest_date:
             cache_age_hours = round(
-                (datetime.now() - self.cache["last_updated"]).total_seconds() / 3600,
+                (datetime.now() - latest_date).total_seconds() / 3600,
                 1
             )
         
         return {
-            "has_articles": len(self.cache["articles"]) > 0,
-            "article_count": len(self.cache["articles"]),
-            "last_updated": self.cache["last_updated"].isoformat() if self.cache["last_updated"] else None,
+            "has_articles": article_count > 0,
+            "article_count": article_count,
+            "last_updated": latest_date.isoformat() if latest_date else None,
             "cache_age_hours": cache_age_hours,
-            "is_fetching": self.cache["is_fetching"],
-            "is_expired": cache_age_hours > self.CACHE_EXPIRY_HOURS if self.cache["last_updated"] else True,
-            "perplexity_available": self.client is not None
+            "is_expired": cache_age_hours > self.CACHE_EXPIRY_HOURS if latest_date else True,
+            "perplexity_available": self.client is not None,
+            "storage": "mongodb"
         }

@@ -10,6 +10,7 @@ from pathlib import Path
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Filter, FieldCondition, MatchValue
 from .llm_service import llm_service
+from config.prompts import get_ai_search_system_prompt
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -233,20 +234,8 @@ class EnhancedChatSynthesizer:
                     context.append(f"Category: {msg['category']}")
                     context.append(f"Experience: {msg['text']}")
             
-            # Generate response
-            system_prompt = """You are a visa expert assistant. Your goal is to provide accurate, helpful information about US visas.
-
-Rules:
-1. Use authoritative sources (RedBus2US) as primary references
-2. Support with real community experiences when relevant
-3. Be clear about timelines, fees, and requirements
-4. Highlight any recent changes or updates
-5. Stay factual and avoid speculation
-6. If information is unclear or missing, say so
-7. Format response for readability (bullet points, sections)
-8. Include source attribution when appropriate
-
-Remember: Your advice impacts people's visa journeys. Be accurate and helpful."""
+            # Generate response using centralized prompt configuration
+            system_prompt = get_ai_search_system_prompt()
 
             prompt = f"""Question: {query}
 

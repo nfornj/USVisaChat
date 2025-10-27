@@ -12,6 +12,8 @@ import {
   Chip,
   IconButton,
   keyframes,
+  useMediaQuery,
+  useTheme as useMuiTheme,
 } from '@mui/material';
 import {
   Groups as GroupsIcon,
@@ -33,8 +35,8 @@ const subtleShine = keyframes`
   }
 `;
 
-// Eye-catching shine animation for AI News button
-const brightShine = keyframes`
+// Subtle text shimmer animation for AI News text
+const textShimmer = keyframes`
   0% {
     background-position: -200% center;
   }
@@ -50,45 +52,61 @@ interface HeaderProps {
 
 export function Header({ activeTab, onTabChange }: HeaderProps) {
   const { darkMode, toggleTheme } = useTheme();
+  const muiTheme = useMuiTheme();
+  const isMobile = useMediaQuery(muiTheme.breakpoints.down('sm'));
 
   return (
     <AppBar 
       position="static" 
       elevation={0} 
       sx={{ 
-        bgcolor: 'primary.main', // Match purple theme
+        bgcolor: 'primary.main',
         borderBottom: 1, 
         borderColor: 'divider' 
       }}
     >
-      <Toolbar>
+      <Toolbar sx={{ minHeight: isMobile ? 56 : 64, px: { xs: 1, sm: 2 } }}>
         {/* Logo */}
         <Avatar
           sx={{
-            width: UI_CONFIG.AVATAR_SIZE.SMALL,
-            height: UI_CONFIG.AVATAR_SIZE.SMALL,
-            mr: 2,
-            background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)', // Purple to pink gradient
+            width: isMobile ? 32 : UI_CONFIG.AVATAR_SIZE.SMALL,
+            height: isMobile ? 32 : UI_CONFIG.AVATAR_SIZE.SMALL,
+            mr: { xs: 1, sm: 2 },
+            background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
           }}
         >
-          <GroupsIcon />
+          <GroupsIcon sx={{ fontSize: isMobile ? 20 : 24 }} />
         </Avatar>
-        <Typography variant="h6" component="div" fontWeight="bold">
-          {APP_NAME}
+        <Typography 
+          variant={isMobile ? 'body1' : 'h6'} 
+          component="div" 
+          fontWeight="bold"
+          sx={{ 
+            fontSize: { xs: '0.9rem', sm: '1.25rem' },
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            maxWidth: { xs: '120px', sm: 'none' }
+          }}
+        >
+          {isMobile ? 'H1B Visa' : APP_NAME}
         </Typography>
 
         <Box sx={{ flexGrow: 1 }} />
 
         {/* Topics Button */}
         <Chip
-          icon={<GroupsIcon />}
-          label="Topics"
+          icon={!isMobile ? <GroupsIcon /> : undefined}
+          label={isMobile ? 'Topics' : 'Topics'}
+          size={isMobile ? 'small' : 'medium'}
           sx={{
             fontWeight: 600,
-            mr: 2,
+            mr: { xs: 0.5, sm: 2 },
             cursor: 'pointer',
             transition: 'all 0.3s ease',
             border: '1px solid',
+            fontSize: { xs: '0.75rem', sm: '0.875rem' },
+            height: { xs: 28, sm: 32 },
             ...(activeTab === 'topics'
               ? {
                   bgcolor: 'rgba(255, 255, 255, 0.3)',
@@ -112,45 +130,44 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
           onClick={() => onTabChange('topics')}
         />
 
-        {/* AI News Button - Always Animated */}
+        {/* AI News Button */}
         <Chip
-          icon={<ArticleIcon />}
-          label="AI News"
+          icon={!isMobile ? <ArticleIcon /> : undefined}
+          label={isMobile ? 'News' : 'AI News'}
+          size={isMobile ? 'small' : 'medium'}
           sx={{
             fontWeight: 600,
-            mr: 2,
+            mr: { xs: 0.5, sm: 2 },
             cursor: 'pointer',
             transition: 'all 0.3s ease',
-            border: '2px solid',
-            overflow: 'hidden',
+            border: '1px solid',
+            fontSize: { xs: '0.75rem', sm: '0.875rem' },
+            height: { xs: 28, sm: 32 },
             position: 'relative',
-            // Always animate - regardless of active state
-            background: 'linear-gradient(90deg, #ec4899 0%, #f472b6 50%, #ec4899 100%)',
-            backgroundSize: '200% 100%',
-            animation: `${brightShine} 2s linear infinite`,
-            borderColor: '#fde047',
-            color: '#fff',
-            '&::before': {
-              content: '""',
-              position: 'absolute',
-              top: 0,
-              left: '-100%',
-              width: '100%',
-              height: '100%',
-              background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent)',
-              animation: `${brightShine} 2s linear infinite`,
-            },
+            '& .MuiChip-label': activeTab === 'news' ? {
+              background: 'linear-gradient(90deg, rgba(255,255,255,0.8) 0%, rgba(255,255,255,1) 50%, rgba(255,255,255,0.8) 100%)',
+              backgroundClip: 'text',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundSize: '200% auto',
+              animation: `${textShimmer} 3s linear infinite`,
+            } : undefined,
             ...(activeTab === 'news'
               ? {
-                  boxShadow: '0 0 30px rgba(253, 224, 71, 0.5)',
+                  bgcolor: 'rgba(255, 255, 255, 0.3)',
+                  borderColor: 'rgba(255, 255, 255, 0.4)',
+                  boxShadow: '0 0 15px rgba(255, 255, 255, 0.2)',
+                  animation: `${subtleShine} 3s ease-in-out infinite`,
                   '&:hover': {
-                    boxShadow: '0 0 35px rgba(253, 224, 71, 0.6)',
+                    bgcolor: 'rgba(255, 255, 255, 0.35)',
                   },
                 }
               : {
-                  boxShadow: '0 0 20px rgba(253, 224, 71, 0.3)',
+                  bgcolor: 'rgba(255, 255, 255, 0.2)',
+                  borderColor: 'rgba(255, 255, 255, 0.3)',
+                  color: '#fff',
                   '&:hover': {
-                    boxShadow: '0 0 25px rgba(253, 224, 71, 0.4)',
+                    bgcolor: 'rgba(255, 255, 255, 0.25)',
                   },
                 }),
           }}
@@ -161,9 +178,15 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
         <UserMenu />
 
         {/* Theme Toggle */}
-        <IconButton onClick={toggleTheme} sx={{ ml: 1 }}>
-          {darkMode ? <LightModeIcon /> : <DarkModeIcon />}
-        </IconButton>
+        {!isMobile && (
+          <IconButton 
+            onClick={toggleTheme} 
+            sx={{ ml: { xs: 0.5, sm: 1 } }}
+            size={isMobile ? 'small' : 'medium'}
+          >
+            {darkMode ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
+          </IconButton>
+        )}
       </Toolbar>
     </AppBar>
   );

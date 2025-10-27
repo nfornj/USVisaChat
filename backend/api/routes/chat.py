@@ -13,6 +13,7 @@ from api.schemas import EditMessageRequest
 from models.community_chat import chat_manager
 from models.user_auth import auth_db_instance as auth_db
 from services.news import compress_image
+from services.cache import cache
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,30 @@ async def get_online_users(room_id: str = "general"):
         users = list(chat_manager.rooms[room_id].keys())
         return {"users": users, "count": len(users), "room_id": room_id}
     return {"users": [], "count": 0, "room_id": room_id}
+
+
+@router.get("/room-stats")
+async def get_room_statistics():
+    """Get statistics for all chat rooms (online users and message counts)
+    Cached for 10 seconds to reduce DB load.
+    """
+    try:
+        cached = cache.get_json("room_stats_v1")
+        if cached:
+            return cached
+        
+        stats = chat_manager.get_room_statistics()
+        response = {
+            "success": True,
+            "rooms": stats,
+            "total_rooms": len(stats),
+            "total_online_users": sum(room['online_users'] for room in stats)
+        }
+        cache.set_json("room_stats_v1", response, ttl_seconds=10)
+        return response
+    except Exception as e:
+        logger.error(f"❌ Error getting room statistics: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get room statistics: {str(e)}")
 
 
 @router.post("/upload-image")
@@ -183,12 +208,32 @@ async def websocket_chat_handler(websocket: WebSocket):
             'display_name': display_name
         }
         
+        # Persist presence to DB for cross-machine accuracy
+        try:
+            chat_manager.db.db.update_presence(room_id, user_email, display_name, online=True) if hasattr(chat_manager.db, 'db') and hasattr(chat_manager.db.db, 'update_presence') else chat_manager.db.update_presence(room_id, user_email, display_name, online=True)
+        except Exception:
+            pass
+        
         # Send history
         history = chat_manager.db.get_recent_messages(limit=50, room_id=room_id)
         await websocket.send_json({
             'type': 'history',
             'messages': history,
             'room_id': room_id
+        })
+        
+        # Send full user list to the newly connected user (including themselves)
+        users = [
+            {
+                'email': email,
+                'displayName': conn_info['display_name']
+            }
+            for email, conn_info in chat_manager.rooms[room_id].items()
+        ]
+        await websocket.send_json({
+            'type': 'users',
+            'users': users,
+            'count': len(users)
         })
         
         # Notify others (incremental update for performance)

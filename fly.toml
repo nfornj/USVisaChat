@@ -12,10 +12,10 @@ primary_region = 'iad'  # IAD (Ashburn, VA) - current region
   PYTHONUNBUFFERED = '1'
   ENVIRONMENT = 'production'
   
-  # MongoDB Configuration (use Fly secrets for credentials)
+  # MongoDB Configuration (use Fly secrets for MONGODB_URI with username/password)
   MONGODB_DATABASE = 'visa_community'
-  MONGODB_TLS_ENABLED = 'false'  # Fly.io handles TLS
-  MONGODB_AUTH_MECHANISM = 'MONGODB-X509'
+  MONGODB_TLS_ENABLED = 'true'
+  MONGODB_AUTH_MECHANISM = 'SCRAM-SHA-256'  # Standard username/password auth
   
   # LLM Configuration - use Groq for production
   LLM_PROVIDER = 'groq'
@@ -24,19 +24,15 @@ primary_region = 'iad'  # IAD (Ashburn, VA) - current region
   # Email Configuration
   EMAIL_MODE = 'mock'
   
-  # Qdrant Configuration - using Fly.io app
-  QDRANT_HOST = 'qdrant.internal'  # Internal Fly.io DNS
-  QDRANT_PORT = '6333'
-  
   # CORS Configuration
   ALLOWED_ORIGINS = 'https://usvisachat.fly.dev'  # Your actual domain
 
 [http_service]
   internal_port = 8000
   force_https = true
-  auto_stop_machines = 'suspend'  # Suspend when idle to save costs
+auto_stop_machines = false  # Keep at least one machine always running for fast auth/email
   auto_start_machines = true
-  min_machines_running = 0  # Allow scaling to zero
+  min_machines_running = 1  # Keep one warm instance to avoid cold starts
   processes = ['app']
 
   # Health checks
@@ -49,9 +45,9 @@ primary_region = 'iad'  # IAD (Ashburn, VA) - current region
     type = 'http'
 
 [[vm]]
-  memory = '2gb'  # Increased for numpy/torch dependencies
+  memory = '1gb'
   cpu_kind = 'shared'
-  cpus = 1
+  cpus = 4  # shared-cpu-4x:1gb (testing CPU vs RAM)
 
-# Note: Data storage handled by external services (MongoDB Atlas, Qdrant)
+# Note: Data storage handled by MongoDB Atlas
 # No persistent volumes needed for stateless web app

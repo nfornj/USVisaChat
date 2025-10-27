@@ -80,6 +80,11 @@ class UserAuthDatabase:
         """Update user profile (display name)"""
         if not self.db: return None
         return self.db.update_user_profile(user_id, display_name)
+    
+    def is_user_banned(self, user_email: str) -> bool:
+        """Check if user is currently banned"""
+        if not self.db: return False
+        return self.db.is_user_banned(user_email)
 
 
 # Global auth database instance

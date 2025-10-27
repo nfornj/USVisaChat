@@ -39,8 +39,15 @@ dependencies = [
     "aiohttp>=3.13.0",
     "lxml>=6.0.2",
     "perplexityai>=0.17.0",
+    "google-auth-oauthlib>=1.2.2",
+    "google-auth-httplib2>=0.2.0",
+    "google-api-python-client>=2.185.0",
+    "pyyaml>=6.0.3",
 ]
 
 [tool.uv]
-# Use default PyPI index for better compatibility
+# Prefer CPU-only PyTorch for Docker compatibility
 index-strategy = "unsafe-best-match"
+extra-index-url = [
+    "https://download.pytorch.org/whl/cpu"
+]
