@@ -113,6 +113,13 @@ class MongoDBChatDatabase:
             result = self.messages.insert_one(message_doc)
             message_doc['_id'] = result.inserted_id
             
+            # Invalidate cached history for this room (if enabled)
+            try:
+                from services.cache import cache
+                cache.delete(f"chat:history:{room_id}:50")
+            except Exception:
+                pass
+            
             # If this is a reply, increment the parent's reply_count
             if reply_to:
                 try:
@@ -156,6 +163,16 @@ class MongoDBChatDatabase:
             List[Dict]: List of message documents
         """
         try:
+            # Check cache first (5s TTL set on write path)
+            try:
+                from services.cache import cache
+                cache_key = f"chat:history:{room_id}:{limit}"
+                cached = cache.get_json(cache_key)
+                if cached:
+                    return cached
+            except Exception:
+                cached = None
+            
             cursor = self.messages.find(
                 {
                     'room_id': room_id,
@@ -166,8 +183,16 @@ class MongoDBChatDatabase:
             # Convert to list and reverse (oldest first)
             messages = list(cursor)
             messages.reverse()
+            formatted = [self._format_message(msg) for msg in messages]
             
-            return [self._format_message(msg) for msg in messages]
+            # Cache briefly to absorb reconnect storms
+            try:
+                from services.cache import cache
+                cache.set_json(cache_key, formatted, ttl_seconds=5)
+            except Exception:
+                pass
+            
+            return formatted
             
         except Exception as e:
             logger.error(f"❌ Error getting recent messages: {e}")

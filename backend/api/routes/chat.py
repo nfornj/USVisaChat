@@ -13,6 +13,7 @@ from api.schemas import EditMessageRequest
 from models.community_chat import chat_manager
 from models.user_auth import auth_db_instance as auth_db
 from services.news import compress_image
+from services.cache import cache
 
 logger = logging.getLogger(__name__)
 
@@ -63,15 +64,23 @@ async def get_online_users(room_id: str = "general"):
 
 @router.get("/room-stats")
 async def get_room_statistics():
-    """Get statistics for all chat rooms (online users and message counts)"""
+    """Get statistics for all chat rooms (online users and message counts)
+    Cached for 10 seconds to reduce DB load.
+    """
     try:
+        cached = cache.get_json("room_stats_v1")
+        if cached:
+            return cached
+        
         stats = chat_manager.get_room_statistics()
-        return {
+        response = {
             "success": True,
             "rooms": stats,
             "total_rooms": len(stats),
             "total_online_users": sum(room['online_users'] for room in stats)
         }
+        cache.set_json("room_stats_v1", response, ttl_seconds=10)
+        return response
     except Exception as e:
         logger.error(f"❌ Error getting room statistics: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get room statistics: {str(e)}")
