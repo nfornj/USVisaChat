@@ -17,6 +17,7 @@ from .news_utils import (
 )
 from .article_scraper import scrape_with_fallback
 from models.news import news_model
+from config.prompts import get_perplexity_news_query
 
 logger = logging.getLogger(__name__)
 
@@ -73,20 +74,9 @@ class NewsService:
                 logger.warning("Perplexity client not initialized")
                 return None
             
-            # Default comprehensive H1B/immigration query - focused on 2024-2025 updates
+            # Get query from environment variable or use default
             if not query:
-                current_year = datetime.now().year
-                query = (
-                    f"What are the latest H1B visa and immigration news updates for {current_year}-{current_year + 1}? "
-                    f"Focus on: H1B visa policy changes {current_year}, H1B cap registration and lottery results {current_year}, "
-                    f"H1B stamping appointment availability, H1B premium processing updates, "
-                    f"visa bulletin priority dates for {current_year}, green card processing times, "
-                    f"I-140 and I-485 filing updates, USCIS fee changes {current_year}, "
-                    f"H-4 EAD work authorization news, EB-2 and EB-3 backlogs {current_year}, "
-                    f"consulate visa interview experiences, new immigration regulations {current_year}. "
-                    "Include only recent news from the past 14 days with official sources like USCIS.gov, "
-                    "State Department, immigration law firms, and major news outlets."
-                )
+                query = get_perplexity_news_query()
             
             logger.info(f"🔍 Fetching H1B news from Perplexity using SDK (query: {len(query)} chars)...")
             

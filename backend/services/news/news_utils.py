@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import Dict
 from PIL import Image
 import io
+from config.prompts import get_news_summary_prompt, get_title_generation_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -38,17 +39,19 @@ def generate_comprehensive_ai_summary(title: str, content: str) -> str:
             'Authorization': f'Bearer {groq_api_key}'
         }
         
+        system_prompt = get_news_summary_prompt()
+        
         payload = {
             'model': 'llama-3.1-8b-instant',
             'messages': [{
                 'role': 'system',
-                'content': 'You are an immigration news expert. Summarize articles into 3-5 concise bullet points (each max 120 chars). Focus on key facts, dates, and actionable information. Start each point with • symbol. No introductions or conclusions.'
+                'content': system_prompt
             }, {
                 'role': 'user',
-                'content': f'Summarize this H1B/immigration article into 3-5 bullet points:\n\n{article_text}'
+                'content': f'Summarize this H1B/immigration article:\n\n{article_text}'
             }],
             'temperature': 0.3,
-            'max_tokens': 400  # Increased for longer content
+            'max_tokens': 400
         }
         
         response = requests.post(
@@ -108,14 +111,16 @@ def generate_short_title(original_title: str, content: str) -> str:
             'Authorization': f'Bearer {groq_api_key}'
         }
         
+        system_prompt = get_title_generation_prompt()
+        
         payload = {
             'model': 'llama-3.1-8b-instant',
             'messages': [{
                 'role': 'system',
-                'content': 'You are a news headline writer. Create short, punchy headlines (max 80 chars). Be specific and actionable. Return ONLY the headline, no quotes or explanations.'
+                'content': system_prompt
             }, {
                 'role': 'user',
-                'content': f'Create a short headline for this:\n\nTitle: {original_title}\n\nContent: {content}'  # Use full content
+                'content': f'Title: {original_title}\n\nContent: {content}'
             }],
             'temperature': 0.3,
             'max_tokens': 50

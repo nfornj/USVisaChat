@@ -10,6 +10,7 @@ from pathlib import Path
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Filter, FieldCondition, MatchValue
 from .llm_service import llm_service
+from config.prompts import get_ai_search_system_prompt
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -233,34 +234,8 @@ class EnhancedChatSynthesizer:
                     context.append(f"Category: {msg['category']}")
                     context.append(f"Experience: {msg['text']}")
             
-            # Generate response
-            from datetime import datetime
-            current_year = datetime.now().year
-            
-            system_prompt = f"""You are an expert US immigration and visa assistant with deep knowledge of H1B, F1, Green Card, and other visa processes.
-
-IMPORTANT CONTEXT:
-- Current year: {current_year}
-- Focus on {current_year} policies, timelines, and requirements
-- USCIS policies change frequently - prioritize recent information
-
-YOUR APPROACH:
-1. **Primary Sources**: Use RedBus2US articles as authoritative references for official processes
-2. **Community Context**: Supplement with real user experiences for practical insights
-3. **Specificity**: Provide exact timelines, fees, and document requirements when available
-4. **Updates**: Highlight any {current_year} policy changes or recent updates
-5. **Accuracy**: Be factual and cite sources. If uncertain, acknowledge limitations
-6. **Clarity**: Use bullet points, numbered lists, and clear sections for readability
-7. **Actionable**: Provide next steps and practical advice
-8. **Current**: Focus on information relevant to {current_year}-{current_year + 1}
-
-AVOID:
-- Outdated information from before 2023
-- Speculation about future policy changes
-- Generic advice that doesn't address the specific question
-- Legal advice (you're an information assistant, not a lawyer)
-
-Remember: Your guidance helps people navigate complex visa processes. Be accurate, current, and helpful."""
+            # Generate response using centralized prompt configuration
+            system_prompt = get_ai_search_system_prompt()
 
             prompt = f"""Question: {query}
 
