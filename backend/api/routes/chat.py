@@ -207,6 +207,20 @@ async def websocket_chat_handler(websocket: WebSocket):
             'room_id': room_id
         })
         
+        # Send full user list to the newly connected user (including themselves)
+        users = [
+            {
+                'email': email,
+                'displayName': conn_info['display_name']
+            }
+            for email, conn_info in chat_manager.rooms[room_id].items()
+        ]
+        await websocket.send_json({
+            'type': 'users',
+            'users': users,
+            'count': len(users)
+        })
+        
         # Notify others (incremental update for performance)
         await chat_manager.broadcast_system_message(f"{display_name} joined the chat", room_id=room_id, exclude=user_email)
         await chat_manager.broadcast_user_joined(user_email, display_name, room_id, exclude=user_email)

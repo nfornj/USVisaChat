@@ -237,6 +237,25 @@ export default function CommunityChat({
           setOnlineUsers(data.users || []);
           onOnlineCountChange(data.count || 0);
           break;
+
+        case "user_joined":
+          // Add new user to the list
+          setOnlineUsers((prev) => {
+            // Check if user already exists
+            const exists = prev.some(u => u.email === data.user.email);
+            if (exists) return prev;
+            return [...prev, data.user];
+          });
+          onOnlineCountChange(data.count || 0);
+          break;
+
+        case "user_left":
+          // Remove user from the list
+          setOnlineUsers((prev) =>
+            prev.filter((u) => u.email !== data.email)
+          );
+          onOnlineCountChange(data.count || 0);
+          break;
       }
     };
 
