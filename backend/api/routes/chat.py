@@ -61,6 +61,22 @@ async def get_online_users(room_id: str = "general"):
     return {"users": [], "count": 0, "room_id": room_id}
 
 
+@router.get("/room-stats")
+async def get_room_statistics():
+    """Get statistics for all chat rooms (online users and message counts)"""
+    try:
+        stats = chat_manager.get_room_statistics()
+        return {
+            "success": True,
+            "rooms": stats,
+            "total_rooms": len(stats),
+            "total_online_users": sum(room['online_users'] for room in stats)
+        }
+    except Exception as e:
+        logger.error(f"❌ Error getting room statistics: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get room statistics: {str(e)}")
+
+
 @router.post("/upload-image")
 async def upload_image(
     file: UploadFile = File(...),

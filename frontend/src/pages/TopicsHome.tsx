@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   TrendingUp,
@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "@mui/material/styles";
 import { Box } from "@mui/material";
+import axios from "axios";
 
 interface Topic {
   id: string;
@@ -38,6 +39,9 @@ interface TopicsHomeProps {
 const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
+
+  // Room statistics from API
+  const [roomStats, setRoomStats] = useState<Record<string, { online_users: number; message_count: number }>>({});
 
   const [topics] = useState<Topic[]>([
     {
@@ -132,6 +136,35 @@ const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
 
   const [hoveredTopic, setHoveredTopic] = useState<string | null>(null);
 
+  // Fetch room statistics from API
+  useEffect(() => {
+    const fetchRoomStats = async () => {
+      try {
+        const response = await axios.get('/chat/room-stats');
+        if (response.data.success) {
+          const statsMap: Record<string, { online_users: number; message_count: number }> = {};
+          response.data.rooms.forEach((room: any) => {
+            statsMap[room.room_id] = {
+              online_users: room.online_users,
+              message_count: room.message_count
+            };
+          });
+          setRoomStats(statsMap);
+        }
+      } catch (error) {
+        console.error('Failed to fetch room stats:', error);
+      }
+    };
+
+    // Fetch immediately
+    fetchRoomStats();
+
+    // Refresh every 10 seconds
+    const interval = setInterval(fetchRoomStats, 10000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   const getTrendBadge = (trend: string) => {
     switch (trend) {
       case "hot":
@@ -165,8 +198,8 @@ const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
         background: isDark
           ? "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)"
           : "linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)",
-        py: 6,
-        px: 3,
+        py: { xs: 3, sm: 4, md: 6 },
+        px: { xs: 2, sm: 3 },
       }}
     >
       <div className="max-w-7xl mx-auto">
@@ -177,19 +210,21 @@ const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
           transition={{ duration: 0.5 }}
           className="text-center mb-8"
         >
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white mb-4">
-            <Sparkles className="w-4 h-4" />
-            <span className="text-sm font-semibold">Trending Discussions</span>
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white mb-3 text-sm md:text-base md:px-4 md:py-2 md:mb-4">
+            <Sparkles className="w-3 h-3 md:w-4 md:h-4" />
+            <span className="text-xs font-semibold md:text-sm">Trending Discussions</span>
           </div>
           <h1
-            className={`text-5xl font-bold mb-3 ${
+            className={`text-3xl md:text-4xl lg:text-5xl font-bold mb-2 md:mb-3 ${
               isDark ? "text-white" : "text-gray-900"
             }`}
           >
             Popular Topics
           </h1>
           <p
-            className={`text-lg ${isDark ? "text-gray-300" : "text-gray-600"}`}
+            className={`text-sm md:text-base lg:text-lg ${
+              isDark ? "text-gray-300" : "text-gray-600"
+            }`}
           >
             Join thousands of users discussing visa-related topics
           </p>
@@ -200,41 +235,41 @@ const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="flex justify-center gap-6 mb-12"
+          className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-6 mb-6 sm:mb-8 md:mb-12"
         >
           <div
-            className={`px-6 py-4 rounded-2xl ${
+            className={`px-4 py-3 sm:px-6 sm:py-4 rounded-xl sm:rounded-2xl ${
               isDark
                 ? "bg-white/10 backdrop-blur-lg border border-white/20"
                 : "bg-white/80 backdrop-blur-lg border border-gray-200 shadow-lg"
             }`}
           >
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               <div
-                className={`p-2 rounded-lg ${
+                className={`p-1.5 sm:p-2 rounded-lg ${
                   isDark ? "bg-blue-500/20" : "bg-blue-100"
                 }`}
               >
                 <Users
-                  className={`w-5 h-5 ${
+                  className={`w-4 h-4 sm:w-5 sm:h-5 ${
                     isDark ? "text-blue-400" : "text-blue-600"
                   }`}
                 />
               </div>
               <div>
                 <p
-                  className={`text-2xl font-bold ${
+                  className={`text-xl sm:text-2xl font-bold ${
                     isDark ? "text-white" : "text-gray-900"
                   }`}
                 >
-                  {topics.reduce((sum, t) => sum + t.activeUsers, 0)}
+                  {Object.values(roomStats).reduce((sum, room) => sum + room.online_users, 0)}
                 </p>
                 <p
-                  className={`text-sm ${
+                  className={`text-xs sm:text-sm ${
                     isDark ? "text-gray-300" : "text-gray-600"
                   }`}
                 >
-                  Active Users
+                  Online Now
                 </p>
               </div>
             </div>
@@ -279,7 +314,7 @@ const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
         </motion.div>
 
         {/* Topics Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 md:gap-6">
           {topics.map((topic, index) => (
             <motion.div
               key={topic.id}
@@ -293,16 +328,16 @@ const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
               onClick={() => onTopicSelect(topic.id, topic.name)}
               onMouseEnter={() => setHoveredTopic(topic.id)}
               onMouseLeave={() => setHoveredTopic(null)}
-              className={`cursor-pointer rounded-2xl p-6 transition-all duration-300 ${
+              className={`cursor-pointer rounded-xl sm:rounded-2xl p-4 sm:p-5 md:p-6 transition-all duration-300 ${
                 isDark
                   ? "bg-white/10 backdrop-blur-lg border border-white/20 hover:bg-white/20"
                   : "bg-white border border-gray-200 hover:shadow-2xl shadow-lg"
               }`}
             >
               {/* Topic Header */}
-              <div className="flex items-start justify-between mb-4">
+              <div className="flex items-start justify-between mb-3 sm:mb-4">
                 <div
-                  className={`w-14 h-14 flex items-center justify-center rounded-xl transition-all duration-300 ${
+                  className={`w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-lg sm:rounded-xl transition-all duration-300 ${
                     isDark 
                       ? "bg-gradient-to-br from-white/20 to-white/10 text-white shadow-lg" 
                       : "bg-gradient-to-br from-gray-100 to-gray-50 text-gray-800 shadow-md"
@@ -314,7 +349,7 @@ const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
                       : ""
                   }`}
                 >
-                  <div className="w-7 h-7">
+                  <div className="w-6 h-6 sm:w-7 sm:h-7">
                     {topic.icon}
                   </div>
                 </div>
@@ -323,7 +358,7 @@ const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
 
               {/* Topic Title */}
               <h3
-                className={`text-lg font-bold mb-2 ${
+                className={`text-base sm:text-lg font-bold mb-1 sm:mb-2 ${
                   isDark ? "text-white" : "text-gray-900"
                 }`}
               >
@@ -332,7 +367,7 @@ const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
 
               {/* Category */}
               <p
-                className={`text-sm mb-4 ${
+                className={`text-xs sm:text-sm mb-3 sm:mb-4 ${
                   isDark ? "text-gray-400" : "text-gray-600"
                 }`}
               >
@@ -340,23 +375,23 @@ const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
               </p>
 
               {/* Stats */}
-              <div className="space-y-2 mb-4">
+              <div className="space-y-1.5 sm:space-y-2 mb-3 sm:mb-4">
                 <div className="flex items-center justify-between">
                   <span
-                    className={`text-sm flex items-center gap-2 ${
+                    className={`text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 ${
                       isDark ? "text-gray-300" : "text-gray-600"
                     }`}
                   >
-                    <Users className="w-4 h-4" />
-                    {topic.activeUsers} online
+                    <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    {roomStats[topic.id]?.online_users ?? 0} online
                   </span>
                   <span
-                    className={`text-sm flex items-center gap-2 ${
+                    className={`text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 ${
                       isDark ? "text-gray-300" : "text-gray-600"
                     }`}
                   >
-                    <MessageCircle className="w-4 h-4" />
-                    {topic.messageCount}
+                    <MessageCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    {roomStats[topic.id]?.message_count ?? 0}
                   </span>
                 </div>
                 <p
@@ -370,19 +405,19 @@ const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
 
               {/* Action Button */}
               <div
-                className={`flex items-center justify-between pt-4 border-t ${
+                className={`flex items-center justify-between pt-3 sm:pt-4 border-t ${
                   isDark ? "border-white/10" : "border-gray-200"
                 }`}
               >
                 <span
-                  className={`text-sm font-semibold ${
+                  className={`text-xs sm:text-sm font-semibold ${
                     isDark ? "text-blue-400" : "text-blue-600"
                   }`}
                 >
                   Join Discussion
                 </span>
                 <ArrowRight
-                  className={`w-5 h-5 transition-transform ${
+                  className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform ${
                     hoveredTopic === topic.id ? "translate-x-1" : ""
                   } ${isDark ? "text-blue-400" : "text-blue-600"}`}
                 />
@@ -396,14 +431,14 @@ const TopicsHome: React.FC<TopicsHomeProps> = ({ onTopicSelect }) => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 1 }}
-          className="text-center mt-12"
+          className="text-center mt-8 sm:mt-10 md:mt-12"
         >
           <div className="inline-flex items-center gap-2">
-            <div className={`w-5 h-5 ${isDark ? "text-yellow-400" : "text-yellow-500"}`}>
+            <div className={`w-4 h-4 sm:w-5 sm:h-5 ${isDark ? "text-yellow-400" : "text-yellow-500"}`}>
               <Sparkles className="w-full h-full" />
             </div>
             <p
-              className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}
+              className={`text-xs sm:text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}
             >
               Click on any topic card to join the conversation
             </p>

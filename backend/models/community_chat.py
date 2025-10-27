@@ -345,5 +345,35 @@ class ConnectionManager:
         return saved_msg
 
 
+    def get_room_statistics(self) -> List[Dict]:
+        """Get statistics for all rooms including online users and message counts"""
+        room_stats = []
+        
+        # Get message counts from database
+        if self.db.db:  # Check if MongoDB is available
+            db_room_stats = self.db.db.get_room_stats()
+            db_stats_map = {stat['room_id']: stat for stat in db_room_stats}
+        else:
+            db_stats_map = {}
+        
+        # Combine with online user counts
+        all_room_ids = set(self.rooms.keys()) | set(db_stats_map.keys())
+        
+        for room_id in all_room_ids:
+            online_users = len(self.rooms.get(room_id, {}))
+            db_stat = db_stats_map.get(room_id, {})
+            
+            room_stats.append({
+                'room_id': room_id,
+                'online_users': online_users,
+                'message_count': db_stat.get('message_count', 0),
+                'unique_users': db_stat.get('user_count', 0),
+                'oldest_message': db_stat.get('oldest_message'),
+                'newest_message': db_stat.get('newest_message')
+            })
+        
+        return room_stats
+
+
 # Global connection manager
 chat_manager = ConnectionManager()
