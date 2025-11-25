@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from perplexity import Perplexity
 import concurrent.futures
+from urllib.parse import urlparse
+import re
 
 from .news_utils import (
     generate_comprehensive_ai_summary,
@@ -17,7 +19,8 @@ from .news_utils import (
 )
 from .article_scraper import scrape_with_fallback
 from models.news import news_model
-from config.prompts import get_perplexity_news_query
+from config.prompts import get_perplexity_news_query, get_perplexity_filters
+from models.metrics import metrics_model
 
 logger = logging.getLogger(__name__)
 
@@ -51,20 +54,21 @@ class NewsService:
         # In-memory cache for last API fetch time only
         self.last_api_fetch = None
     
-    def fetch_news(self, query: Optional[str] = None, max_results: int = 15) -> Optional[List[Dict[str, Any]]]:
+    def fetch_news(self, query: Optional[str] = None, max_results: int = 15, force: bool = False) -> Optional[List[Dict[str, Any]]]:
         """
         Fetch H1B news from Perplexity Search API using official SDK
         
         Args:
             query: Custom search query (default: comprehensive H1B/immigration query)
             max_results: Maximum number of results to fetch (default: 15)
+            force: If True, bypasses the 24h fetch cooldown
         
         Returns:
             List of search results or None if fetch failed
         """
         try:
-            # Check rate limiting
-            if self.last_api_fetch:
+            # Check rate limiting (unless forced)
+            if self.last_api_fetch and not force:
                 hours_since_fetch = (datetime.now() - self.last_api_fetch).total_seconds() / 3600
                 if hours_since_fetch < self.MIN_FETCH_INTERVAL_HOURS:
                     logger.info(f"⏳ Perplexity API called {hours_since_fetch:.1f}h ago. Skipping (minimum {self.MIN_FETCH_INTERVAL_HOURS}h interval)")
@@ -80,15 +84,27 @@ class NewsService:
             
             logger.info(f"🔍 Fetching H1B news from Perplexity using SDK (query: {len(query)} chars)...")
             
-            # Use official SDK without domain filter for better results
-            search = self.client.search.create(
-                query=query,
-                max_results=max_results,
-                max_tokens_per_page=2048
-            )
+            # Build advanced filters
+            filters = get_perplexity_filters()
+            # Only domain filter is supported reliably in the current Python SDK
+            create_kwargs = {
+                'query': query,
+                'max_results': max_results,
+                'max_tokens_per_page': 2048,
+            }
+            domains = filters.get('domains') or []
+            if domains:
+                # Ensure YouTube is NOT in the allowed set
+                domains = [d for d in domains if 'youtube' not in d]
+                create_kwargs['search_domain_filter'] = domains
+            logger.info(f"🔍 Perplexity filters: domains={len(domains)}")
+            
+            # Use official SDK with filters
+            search = self.client.search.create(**create_kwargs)
             
             # Track successful API call
             self.last_api_fetch = datetime.now()
+            metrics_model.inc_perplexity()
             
             # Extract results from SDK response
             results = []
@@ -115,13 +131,48 @@ class NewsService:
                     
                     results.append(result_data)
             
-            logger.info(f"✅ Successfully fetched {len(results)} news articles from Perplexity SDK")
+            # Filter out YouTube results defensively
+            def _is_youtube(u: str) -> bool:
+                try:
+                    host = urlparse(u).netloc.lower()
+                    return any(h in host for h in ('youtube.com', 'youtu.be', 'youtube-nocookie.com', 'player.youtube.com'))
+                except Exception:
+                    return False
+            results = [r for r in results if not _is_youtube(r.get('url', ''))]
+            
+            logger.info(f"✅ Successfully fetched {len(results)} non-YouTube news articles from Perplexity SDK")
             return results
             
         except Exception as e:
             logger.error(f"Error fetching news from Perplexity SDK: {e}")
             return None
     
+    def _parse_date_strict(self, date_str: Optional[str], url: str) -> Optional[datetime]:
+        """Return a publication datetime only if it is parseable and within the current year.
+        Falls back to parsing the URL for YYYY/MM/DD or YYYY-MM-DD. Returns None if not reliable.
+        """
+        def from_str(s: str) -> Optional[datetime]:
+            try:
+                return datetime.fromisoformat(s.replace('Z', '+00:00'))
+            except Exception:
+                return None
+        # Try provided field
+        if date_str:
+            dt = from_str(str(date_str))
+            if dt:
+                return dt
+        # Try URL patterns
+        m = re.search(r"/(20\d{2})/(\d{1,2})/(\d{1,2})", url)
+        if not m:
+            m = re.search(r"(20\d{2})-(\d{1,2})-(\d{1,2})", url)
+        if m:
+            y, mo, d = map(int, m.groups())
+            try:
+                return datetime(y, mo, d)
+            except Exception:
+                pass
+        return None
+
     def _process_single_article(self, result: Dict[str, Any], index: int) -> Optional[Dict[str, Any]]:
         """
         Process a single article (used for parallel processing)
@@ -131,8 +182,21 @@ class NewsService:
             perplexity_content = result.get('content', result.get('snippet', ''))
             snapshot = result.get('snapshot', '')  # Check for snapshot field
             url = result.get('url', f'https://example.com/h1b-news/{index+1}')
-            published_at = result.get('published_date', datetime.now().isoformat())
+            raw_date = result.get('published_date') or result.get('date') or result.get('published') or ''
             source = result.get('site', 'Immigration News')
+            # Domain for uniqueness
+            try:
+                site_domain = urlparse(url).netloc.replace("www.", "")
+            except Exception:
+                site_domain = source.lower().replace(" ", "-")
+            
+            # Strict publication date handling: require parseable date in current year
+            pub_dt = self._parse_date_strict(raw_date, url)
+            now = datetime.now()
+            if not pub_dt or pub_dt.year != now.year or (now - pub_dt).days > 30:
+                logger.info(f"⏭️  Skipping article {index} due to date filter (raw='{raw_date}' url='{url}')")
+                return None
+            published_at = pub_dt.isoformat()
             
             # Try to get full article content (Priority: Snapshot > Scrape > Perplexity snippet)
             if snapshot and len(snapshot) > len(perplexity_content):
@@ -159,11 +223,15 @@ class NewsService:
             article = {
                 "id": f"article-{index}",
                 "title": short_title,
+                "originalTitle": original_title,
                 "summary": full_content[:300] + "..." if len(full_content) > 300 else full_content,
                 "content": full_content,  # Store full scraped content
                 "url": url,
                 "publishedAt": published_at,
                 "source": source,
+                "siteDomain": site_domain,
+                "topicKey": self._normalize_title(original_title),
+                "sources": [{"title": original_title, "url": url, "site": source}],
                 "imageUrl": get_fallback_image(image_topic, index),
                 "aiSummary": ai_summary,
                 "tags": ["H1B", "Visa", "Immigration", "Work Visa", "Tech Industry"]
@@ -210,9 +278,116 @@ class NewsService:
         # Sort articles by original index to maintain order
         articles.sort(key=lambda x: int(x['id'].split('-')[1]))
         
-        logger.info(f"✅ Successfully processed {len(articles)} articles")
-        return articles
+        # De-duplicate by topic and merge sources
+        deduped = self._dedupe_and_merge_sources(articles)
+        curated = self._curate_top_articles(deduped)
+        logger.info(f"✅ Successfully curated {len(curated)} articles (from {len(articles)})")
+        return curated
     
+    def _normalize_title(self, title: str) -> str:
+        import re
+        t = (title or "").lower()
+        t = re.sub(r"[^a-z0-9\s]", " ", t)
+        t = re.sub(r"\s+", " ", t).strip()
+        # Keep first 12 words as signature
+        return " ".join(t.split()[:12])
+
+    def _dedupe_and_merge_sources(self, articles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Group similar articles by normalized title and merge their sources."""
+        if not articles:
+            return []
+        groups: Dict[str, Dict[str, Any]] = {}
+        for a in articles:
+            key = a.get("topicKey") or self._normalize_title(a.get("originalTitle") or a.get("title"))
+            if key in groups:
+                # Append as additional source if url not already present
+                existing = groups[key]
+                urls = {s.get("url") for s in existing.get("sources", [])}
+                if a.get("url") not in urls:
+                    existing.setdefault("sources", []).append({
+                        "title": a.get("originalTitle") or a.get("title"),
+                        "url": a.get("url"),
+                        "site": a.get("source")
+                    })
+                # Keep newest publishedAt and image
+                if a.get("publishedAt", "") > existing.get("publishedAt", ""):
+                    existing["publishedAt"] = a.get("publishedAt")
+                if not existing.get("imageUrl") and a.get("imageUrl"):
+                    existing["imageUrl"] = a.get("imageUrl")
+                # Prefer explicit siteDomain
+                if not existing.get("siteDomain") and a.get("siteDomain"):
+                    existing["siteDomain"] = a.get("siteDomain")
+            else:
+                groups[key] = a
+                groups[key].setdefault("sources", a.get("sources", []))
+                groups[key]["topicKey"] = key
+        # Return in sorted order by publishedAt desc
+        unique_articles = list(groups.values())
+        unique_articles.sort(key=lambda x: x.get("publishedAt", ""), reverse=True)
+        return unique_articles
+
+    def _curate_top_articles(self, articles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Apply curation rules:
+        - Only last 30 days
+        - Prefer unique siteDomain and topicKey
+        - Exactly up to 10 for display
+        - Breaking news (<24h) pinned to top
+        """
+        if not articles:
+            return []
+        now = datetime.now()
+        thirty_days_ago = now - timedelta(days=30)
+        # Filter by date and current year
+        def parse_dt(s: str):
+            try:
+                return datetime.fromisoformat(str(s).replace('Z', '+00:00'))
+            except Exception:
+                return None
+        # Keep only items with a parseable date within 30 days AND current year
+        recent = []
+        for a in articles:
+            dt = parse_dt(a.get("publishedAt"))
+            if dt and dt >= thirty_days_ago and dt.year == now.year:
+                recent.append(a)
+        # Sort by recency
+        recent.sort(key=lambda x: x.get("publishedAt", ""), reverse=True)
+        selected: List[Dict[str, Any]] = []
+        seen_sites = set()
+        seen_topics = set()
+        # First, collect breaking news <24h regardless of repeat topic
+        for a in recent:
+            if len(selected) >= 10:
+                break
+            dt = parse_dt(a.get("publishedAt"))
+            if not dt:
+                continue
+            age_hours = (now - dt).total_seconds() / 3600
+            if age_hours <= 24 and a.get("siteDomain") not in seen_sites:
+                selected.append(a)
+                seen_sites.add(a.get("siteDomain"))
+                seen_topics.add(a.get("topicKey"))
+        # Then, fill with unique site + topic
+        for a in recent:
+            if len(selected) >= 10:
+                break
+            site = a.get("siteDomain")
+            topic = a.get("topicKey")
+            if site in seen_sites or topic in seen_topics:
+                continue
+            selected.append(a)
+            seen_sites.add(site)
+            seen_topics.add(topic)
+        # If still less than 10, relax topic uniqueness but keep site uniqueness
+        for a in recent:
+            if len(selected) >= 10:
+                break
+            site = a.get("siteDomain")
+            if site in seen_sites:
+                continue
+            selected.append(a)
+            seen_sites.add(site)
+        return selected
+
     def merge_articles_intelligently(
         self, 
         new_articles: List[Dict[str, Any]], 
@@ -275,11 +450,11 @@ class NewsService:
         }
     
     def is_cache_expired(self) -> bool:
-        """Check if cache is expired"""
-        if not self.cache["last_updated"]:
+        """Check if cache is expired based on the latest article timestamp in MongoDB"""
+        latest_date = self.news_model.get_latest_article_date()
+        if not latest_date:
             return True
-        
-        cache_age_hours = (datetime.now() - self.cache["last_updated"]).total_seconds() / 3600
+        cache_age_hours = (datetime.now() - latest_date).total_seconds() / 3600
         return cache_age_hours > self.CACHE_EXPIRY_HOURS
     
     def refresh_cache(self, force: bool = False) -> Dict[str, Any]:
@@ -296,7 +471,7 @@ class NewsService:
         
         try:
             # Fetch from Perplexity using SDK
-            results = self.fetch_news()
+            results = self.fetch_news(force=force)
             
             if results:
                 new_articles = self.process_results(results)

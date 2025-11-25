@@ -216,6 +216,7 @@ export default function CommunityChat({
               timestamp: data.timestamp,
               messageType: data.messageType,
               replyTo: data.replyTo,
+              imageUrl: data.imageUrl,
             },
           ]);
           break;

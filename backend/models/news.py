@@ -39,9 +39,16 @@ class NewsModel:
             # Index on url (unique) to prevent duplicates
             self.collection.create_index("url", unique=True, name="idx_news_url_unique")
             
-            # Compound index for efficient querying
+            # Unique topic key for replacement by topic
+            try:
+                self.collection.create_index("topicKey", unique=True, sparse=True, name="idx_news_topic_unique")
+            except Exception:
+                # Older docs might not have topicKey; sparse allows coexistence
+                pass
+            
+            # Compound index for efficient querying (use camelCase if present)
             self.collection.create_index(
-                [("created_at", -1), ("published_at", -1)],
+                [("publishedAt", -1), ("created_at", -1)],
                 name="idx_news_dates"
             )
             
@@ -75,9 +82,11 @@ class NewsModel:
                         "updated_at": datetime.utcnow()
                     }
                     
-                    # Upsert (update if exists, insert if new)
+                    # Prefer upsert by topicKey if present to replace older topic
+                    filter_query = {"topicKey": article.get("topicKey")} if article.get("topicKey") else {"url": article.get("url")}
+                    
                     result = self.collection.update_one(
-                        {"url": article.get("url")},
+                        filter_query,
                         {"$set": article_data},
                         upsert=True
                     )
@@ -144,11 +153,14 @@ class NewsModel:
             return []
         
         try:
-            articles = list(
-                self.collection.find({}, {"_id": 0})  # Exclude MongoDB _id
-                .sort("created_at", -1)
-                .limit(limit)
-            )
+            # Sort primarily by publishedAt (ISO string), fallback to created_at
+            pipeline = [
+                {"$addFields": {"_pub": {"$ifNull": ["$publishedAt", "$published_at"]}}},
+                {"$sort": {"_pub": -1, "created_at": -1}},
+                {"$project": {"_id": 0, "_pub": 0}},
+                {"$limit": limit}
+            ]
+            articles = list(self.collection.aggregate(pipeline))
             
             logger.info(f"📰 Retrieved {len(articles)} articles from MongoDB")
             return articles
@@ -169,23 +181,31 @@ class NewsModel:
             return 0
     
     def get_latest_article_date(self) -> Optional[datetime]:
-        """Get the published date of the most recent article"""
+        """Get the best available timestamp for the most recent article.
+        Priority: publishedAt (camelCase) > published_at (snake_case) > created_at
+        """
         if self.collection is None:
             return None
         
         try:
+            # Try camelCase field used by the service
             latest = self.collection.find_one(
                 {},
-                {"published_at": 1},
-                sort=[("published_at", -1)]
+                {"publishedAt": 1, "published_at": 1, "created_at": 1},
+                sort=[("publishedAt", -1), ("published_at", -1), ("created_at", -1)]
             )
             
-            if latest and "published_at" in latest:
-                # Handle both datetime and string formats
-                pub_date = latest["published_at"]
-                if isinstance(pub_date, str):
-                    return datetime.fromisoformat(pub_date.replace('Z', '+00:00'))
-                return pub_date
+            if latest:
+                # Prefer publishedAt
+                for key in ("publishedAt", "published_at", "created_at"):
+                    if key in latest and latest[key]:
+                        value = latest[key]
+                        if isinstance(value, str):
+                            try:
+                                return datetime.fromisoformat(value.replace('Z', '+00:00'))
+                            except Exception:
+                                continue
+                        return value
                 
         except Exception as e:
             logger.error(f"Error getting latest article date: {e}")

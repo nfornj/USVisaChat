@@ -46,8 +46,8 @@ const textShimmer = keyframes`
 `;
 
 interface HeaderProps {
-  activeTab: 'topics' | 'news';
-  onTabChange: (tab: 'topics' | 'news') => void;
+  activeTab: 'topics' | 'news' | 'admin';
+  onTabChange: (tab: 'topics' | 'news' | 'admin') => void;
 }
 
 export function Header({ activeTab, onTabChange }: HeaderProps) {

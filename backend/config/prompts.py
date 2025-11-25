@@ -60,6 +60,20 @@ def get_perplexity_news_query() -> str:
     )
 
 
+def get_perplexity_filters() -> dict:
+    """Return domain/country/recency filters for Perplexity search from YAML."""
+    domains = PROMPTS.get('perplexity_domain_filter') or []
+    if isinstance(domains, str):
+        domains = [d.strip() for d in domains.split(',') if d.strip()]
+    country = PROMPTS.get('perplexity_country') or 'US'
+    recency = PROMPTS.get('perplexity_recency_filter') or 'month'
+    return {
+        'domains': domains,
+        'country': country,
+        'recency': recency,
+    }
+
+
 def get_groq_system_prompt() -> str:
     """
     Get Groq LLM system prompt from prompts.yaml (for general Groq queries)
@@ -162,6 +176,7 @@ Return ONLY the title, nothing else."""
 # Export all prompt functions
 __all__ = [
     'get_perplexity_news_query',
+    'get_perplexity_filters',
     'get_groq_system_prompt',
     'get_ai_search_system_prompt',
     'get_news_summary_prompt',

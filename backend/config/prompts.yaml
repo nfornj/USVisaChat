@@ -12,15 +12,27 @@
 # Used to fetch H1B and immigration news from Perplexity API
 # {year} and {next_year} will be replaced with current year values
 perplexity_news_query: |
-  What are the latest H1B visa and immigration news updates for {year}-{next_year}? 
-  Focus on: H1B visa policy changes {year}, H1B cap registration and lottery results {year}, 
-  H1B stamping appointment availability, H1B premium processing updates, 
-  visa bulletin priority dates for {year}, green card processing times, 
-  I-140 and I-485 filing updates, USCIS fee changes {year}, 
-  H-4 EAD work authorization news, EB-2 and EB-3 backlogs {year}, 
-  consulate visa interview experiences, new immigration regulations {year}. 
-  Include only recent news from the past 14 days with official sources like USCIS.gov, 
-  State Department, immigration law firms, and major news outlets.
+  Retrieve the most recent US visa news from the last 30 days only (exclude older).
+  Return at least 25 diverse results across different websites and topics touching:
+  - USCIS policy/rule updates, processing timelines, fee changes
+  - Visa bulletin and green card cutoff dates
+  - Appointments, consulates, travel and entry updates, government notices
+  - H-1B, F-1/OPT, TN, L, EB categories
+  Prefer authoritative sources (USCIS.gov, travel.state.gov, law firms, major outlets).
+  Include: title, url, site, snippet/content and publication date.
+
+# Perplexity Search Filters (optional overrides)
+# Domains to prioritize/limit search to. If empty or omitted, no domain filter is used.
+perplexity_domain_filter:
+  - redbus2us.com
+  - murthy.com
+  - newsweek.com
+
+# Country hint for the search ranking
+perplexity_country: US
+
+# Recency window hint for the search engine (day|week|month|year)
+perplexity_recency_filter: month
 
 # Groq System Prompt (General Purpose)
 # Used for general Groq LLM queries

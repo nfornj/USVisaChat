@@ -37,6 +37,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data: https:; "
             "connect-src 'self' ws: wss:; "
+            "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://player.youtube.com; "
             "frame-ancestors 'none';"
         )
         

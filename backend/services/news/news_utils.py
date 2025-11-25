@@ -12,6 +12,7 @@ from typing import Dict
 from PIL import Image
 import io
 from config.prompts import get_news_summary_prompt, get_title_generation_prompt
+from models.metrics import metrics_model
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,10 @@ def generate_comprehensive_ai_summary(title: str, content: str) -> str:
             data = response.json()
             summary = data['choices'][0]['message']['content'].strip()
             logger.info(f"✅ Generated AI summary using Groq")
+            try:
+                metrics_model.inc_groq_summary()
+            except Exception:
+                pass
             return summary
         else:
             logger.error(f"Groq API error: {response.status_code}")
@@ -136,7 +141,12 @@ def generate_short_title(original_title: str, content: str) -> str:
         if response.status_code == 200:
             data = response.json()
             title = data['choices'][0]['message']['content'].strip()
-            title = title.strip('"\'')
+            # Strip surrounding quotes if present
+            title = title.strip("\"'")
+            try:
+                metrics_model.inc_groq_title()
+            except Exception:
+                pass
             return title[:80]
         else:
             return original_title[:80]

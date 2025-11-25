@@ -27,10 +27,17 @@ primary_region = 'iad'  # IAD (Ashburn, VA) - current region
   # CORS Configuration
   ALLOWED_ORIGINS = 'https://usvisachat.fly.dev'  # Your actual domain
 
+# Persistent volume for images and other data
+[[mounts]]
+  source = 'chat_data'
+  destination = '/app/data'
+  uid = 1000
+  gid = 1000
+
 [http_service]
   internal_port = 8000
   force_https = true
-auto_stop_machines = false  # Keep at least one machine always running for fast auth/email
+  auto_stop_machines = false  # Keep at least one machine always running for fast auth/email
   auto_start_machines = true
   min_machines_running = 1  # Keep one warm instance to avoid cold starts
   processes = ['app']
@@ -49,5 +56,4 @@ auto_stop_machines = false  # Keep at least one machine always running for fast 
   cpu_kind = 'shared'
   cpus = 4  # shared-cpu-4x:1gb (testing CPU vs RAM)
 
-# Note: Data storage handled by MongoDB Atlas
-# No persistent volumes needed for stateless web app
+# Data: MongoDB handles structured chat, Fly volume stores uploaded images under /app/data/media

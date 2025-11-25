@@ -70,7 +70,7 @@ app.add_middleware(
     allow_origins=allowed_origins,  # Restricted to specific domains
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Specific methods only
-    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],  # Specific headers
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-Admin-Email"],  # Specific headers (added X-Admin-Email for admin actions)
     max_age=3600,  # Cache preflight requests for 1 hour
 )
 
