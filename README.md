@@ -111,8 +111,11 @@ curl http://localhost:8000/health
 
 ```bash
 docker compose up qdrant -d
-uv sync
-python visa_mcp_server.py
+# Install dependencies
+pip install -r backend/requirements.txt
+
+# Run the backend
+python -m backend.api.main
 ```
 
 ### Frontend
@@ -237,14 +240,15 @@ User → React Frontend
 
 ```
 /
-├── visa_mcp_server.py          # Main server
-├── community_chat.py            # WebSocket chat
-├── chat_synthesizer.py         # AI synthesis
-├── simple_vector_processor.py   # Vector search
-├── frontend/                    # React UI
-├── docker-compose.yml           # Services
-├── Dockerfile.fullstack         # Build config
-└── PROGRESS.md                  # Development history
+├── backend/
+│   ├── api/
+│   │   └── main.py             # Main server entry point
+│   ├── services/               # Business logic services
+│   └── models/                 # Data models
+├── frontend/                   # React UI
+├── docker-compose.yml          # Services
+├── Dockerfile.fullstack        # Build config
+└── PROGRESS.md                 # Development history
 ```
 
 ---

@@ -5,6 +5,7 @@ Uses Qdrant for semantic search and LLM for response generation.
 
 import logging
 import json
+import os
 from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 from qdrant_client import QdrantClient
@@ -17,9 +18,12 @@ logger = logging.getLogger(__name__)
 class EnhancedChatSynthesizer:
     """Enhanced chat synthesizer with RedBus2US knowledge."""
     
-    def __init__(self, qdrant_host: str = "localhost"):
+    def __init__(self, qdrant_host: str = None):
         """Initialize the chat synthesizer."""
-        self.qdrant = QdrantClient(host=qdrant_host, port=6333)
+        if qdrant_host is None:
+            qdrant_host = os.getenv("QDRANT_HOST", "localhost")
+        qdrant_port = int(os.getenv("QDRANT_PORT", "6333"))
+        self.qdrant = QdrantClient(host=qdrant_host, port=qdrant_port)
         self.llm_service = llm_service
         
         # Collection names
@@ -30,7 +34,7 @@ class EnhancedChatSynthesizer:
         self.redbus_metadata = self.load_redbus_metadata()
         
         logger.info(f"✅ Enhanced synthesizer ready!")
-        logger.info(f"   Qdrant: {qdrant_host}:6333")
+        logger.info(f"   Qdrant: {qdrant_host}:{qdrant_port}")
         logger.info(f"   LLM Provider: {self.llm_service.get_provider_info()['provider']}")
         logger.info(f"   RedBus2US collection: {self.redbus_collection}")
     
