@@ -12,6 +12,7 @@ from typing import List, Dict, Any, Optional
 import json
 import logging
 import uuid
+import os
 from dataclasses import dataclass
 
 try:
@@ -33,12 +34,12 @@ logger = logging.getLogger(__name__)
 @dataclass
 class VectorConfig:
     """Configuration for vector processing"""
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
-    embedding_dimensions: int = 384
-    qdrant_host: str = "qdrant"
-    qdrant_port: int = 6333
-    collection_name: str = "visa_conversations"
-    batch_size: int = 16
+    embedding_model: str = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+    embedding_dimensions: int = int(os.getenv("EMBEDDING_DIMENSIONS", "384"))
+    qdrant_host: str = os.getenv("QDRANT_HOST", "localhost")
+    qdrant_port: int = int(os.getenv("QDRANT_PORT", "6333"))
+    collection_name: str = os.getenv("QDRANT_COLLECTION", "visa_conversations")
+    batch_size: int = int(os.getenv("BATCH_SIZE", "16"))
 
 class SimpleVectorProcessor:
     """Simple vector processor for visa conversations"""

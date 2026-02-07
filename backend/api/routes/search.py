@@ -5,6 +5,7 @@ Handles vector search, AI assistant, and MCP protocol endpoints
 
 import asyncio
 import logging
+import os
 from fastapi import APIRouter, HTTPException
 from qdrant_client import QdrantClient
 
@@ -33,7 +34,7 @@ async def detailed_health():
     """Detailed health check with database status"""
     try:
         # Check Qdrant connection
-        qdrant = QdrantClient(host="qdrant", port=6333)
+        qdrant = QdrantClient(host=os.getenv("QDRANT_HOST", "localhost"), port=int(os.getenv("QDRANT_PORT", "6333")))
         collections = qdrant.get_collections()
         
         # Check if our collection exists
