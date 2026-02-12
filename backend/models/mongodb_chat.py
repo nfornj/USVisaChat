@@ -22,6 +22,16 @@ class MongoDBChatDatabase:
         
         self.db = mongodb_client.db
         self.messages = self.db.messages
+        # Presence collection for online users across machines
+        self.presence = self.db.chat_presence
+
+        # Ensure indexes (idempotent)
+        try:
+            self.presence.create_index([('room_id', 1), ('email', 1)], unique=True)
+            self.presence.create_index([('online', 1)])
+            self.presence.create_index([('last_seen', 1)])
+        except Exception as e:
+            logger.warning(f"⚠️ Could not ensure presence indexes: {e}")
         
         logger.info("✅ MongoDB Chat Database initialized")
     
@@ -103,6 +113,13 @@ class MongoDBChatDatabase:
             result = self.messages.insert_one(message_doc)
             message_doc['_id'] = result.inserted_id
             
+            # Invalidate cached history for this room (if enabled)
+            try:
+                from services.cache import cache
+                cache.delete(f"chat:history:{room_id}:50")
+            except Exception:
+                pass
+            
             # If this is a reply, increment the parent's reply_count
             if reply_to:
                 try:
@@ -146,6 +163,16 @@ class MongoDBChatDatabase:
             List[Dict]: List of message documents
         """
         try:
+            # Check cache first (5s TTL set on write path)
+            try:
+                from services.cache import cache
+                cache_key = f"chat:history:{room_id}:{limit}"
+                cached = cache.get_json(cache_key)
+                if cached:
+                    return cached
+            except Exception:
+                cached = None
+            
             cursor = self.messages.find(
                 {
                     'room_id': room_id,
@@ -156,8 +183,16 @@ class MongoDBChatDatabase:
             # Convert to list and reverse (oldest first)
             messages = list(cursor)
             messages.reverse()
+            formatted = [self._format_message(msg) for msg in messages]
             
-            return [self._format_message(msg) for msg in messages]
+            # Cache briefly to absorb reconnect storms
+            try:
+                from services.cache import cache
+                cache.set_json(cache_key, formatted, ttl_seconds=5)
+            except Exception:
+                pass
+            
+            return formatted
             
         except Exception as e:
             logger.error(f"❌ Error getting recent messages: {e}")
@@ -407,6 +442,157 @@ class MongoDBChatDatabase:
         except Exception as e:
             logger.error(f"❌ Error getting stats: {e}")
             return {}
+    
+    def delete_old_messages(self, days_old: int = 30, room_id: Optional[str] = None) -> Dict[str, int]:
+        """
+        Delete messages older than specified days (admin function)
+        
+        Args:
+            days_old: Delete messages older than this many days
+            room_id: Optional room filter. If None, deletes from all rooms
+        
+        Returns:
+            Dict with deleted count
+        """
+        try:
+            from datetime import timedelta
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_old)
+            
+            query = {'created_at': {'$lt': cutoff_date}}
+            if room_id:
+                query['room_id'] = room_id
+            
+            result = self.messages.delete_many(query)
+            deleted_count = result.deleted_count
+            
+            logger.info(f"✅ Deleted {deleted_count} messages older than {days_old} days" + 
+                       (f" from room {room_id}" if room_id else " from all rooms"))
+            
+            return {
+                'deleted': deleted_count,
+                'days_old': days_old,
+                'room_id': room_id
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error deleting old messages: {e}")
+            return {'deleted': 0, 'error': str(e)}
+    
+    def delete_room_messages(self, room_id: str, keep_last_n: int = 0) -> Dict[str, int]:
+        """
+        Delete all messages from a specific room (admin function)
+        
+        Args:
+            room_id: Room ID to clear
+            keep_last_n: Keep the last N messages (0 = delete all)
+        
+        Returns:
+            Dict with deleted count
+        """
+        try:
+            if keep_last_n > 0:
+                # Get IDs of messages to keep
+                messages_to_keep = self.messages.find(
+                    {'room_id': room_id}
+                ).sort('created_at', -1).limit(keep_last_n)
+                keep_ids = [msg['_id'] for msg in messages_to_keep]
+                
+                # Delete all except those to keep
+                result = self.messages.delete_many({
+                    'room_id': room_id,
+                    '_id': {'$nin': keep_ids}
+                })
+            else:
+                # Delete all messages in room
+                result = self.messages.delete_many({'room_id': room_id})
+            
+            deleted_count = result.deleted_count
+            logger.info(f"✅ Deleted {deleted_count} messages from room {room_id}")
+            
+            return {
+                'deleted': deleted_count,
+                'room_id': room_id,
+                'kept': keep_last_n
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error deleting room messages: {e}")
+            return {'deleted': 0, 'error': str(e)}
+    
+    def update_presence(self, room_id: str, email: str, display_name: str, online: bool = True) -> None:
+        """Upsert user's presence record for a room"""
+        try:
+            now = datetime.now(timezone.utc)
+            self.presence.update_one(
+                {'room_id': room_id, 'email': email.lower().strip()},
+                {
+                    '$set': {
+                        'display_name': display_name,
+                        'online': online,
+                        'last_seen': now
+                    },
+                    '$setOnInsert': {
+                        'first_seen': now
+                    }
+                },
+                upsert=True
+            )
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to update presence for {email} in {room_id}: {e}")
+    
+    def get_online_count(self, room_id: str) -> int:
+        """Get online user count for a room from presence collection"""
+        try:
+            return self.presence.count_documents({'room_id': room_id, 'online': True})
+        except Exception:
+            return 0
+    
+    def get_presence_counts_map(self) -> Dict[str, int]:
+        """Get online counts per room using aggregation"""
+        try:
+            pipeline = [
+                {'$match': {'online': True}},
+                {'$group': {'_id': '$room_id', 'count': {'$sum': 1}}},
+                {'$project': {'room_id': '$_id', 'count': 1, '_id': 0}}
+            ]
+            results = list(self.presence.aggregate(pipeline))
+            return {r['room_id']: r['count'] for r in results}
+        except Exception:
+            return {}
+    
+    def get_room_stats(self) -> List[Dict]:
+        """
+        Get statistics for all rooms (admin function)
+        
+        Returns:
+            List of room statistics
+        """
+        try:
+            pipeline = [
+                {'$match': {'deleted': False}},
+                {'$group': {
+                    '_id': '$room_id',
+                    'message_count': {'$sum': 1},
+                    'unique_users': {'$addToSet': '$user_email'},
+                    'oldest_message': {'$min': '$created_at'},
+                    'newest_message': {'$max': '$created_at'}
+                }},
+                {'$project': {
+                    'room_id': '$_id',
+                    'message_count': 1,
+                    'user_count': {'$size': '$unique_users'},
+                    'oldest_message': 1,
+                    'newest_message': 1,
+                    '_id': 0
+                }}
+            ]
+            
+            results = list(self.messages.aggregate(pipeline))
+            return results
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting room stats: {e}")
+            return []
     
     def _format_message(self, message_doc: Dict) -> Dict:
         """Format message document for API response"""

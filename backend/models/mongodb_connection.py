@@ -125,75 +125,162 @@ class MongoDBConnection:
             "w": "majority"                     # Write concern
         }
         
-        # Add TLS/Certificate options
+        # If using full connection URI (with credentials embedded), don't add auth options
+        if self.connection_string and '@' in self.connection_string:
+            logger.info("🔗 Using full connection URI with embedded credentials")
+            # Just enable TLS if configured
+            if self.tls_enabled:
+                options["tls"] = True
+            return options
+        
+        # Add TLS/Certificate options (only for certificate-based auth)
         if self.tls_enabled:
             options["tls"] = True
-            options["tlsAllowInvalidCertificates"] = True  # Temporarily allow invalid certificates
-            options["tlsAllowInvalidHostnames"] = True     # Temporarily allow invalid hostnames
             
-            if self.tls_cert_file:
-                logger.info(f"📜 Using client certificate: {self.tls_cert_file}")
-                options["tlsCertificateKeyFile"] = self.tls_cert_file
+            # Only add certificate if file exists and we're using X.509
+            if self.auth_mechanism == "MONGODB-X509" and self.tls_cert_file:
+                if Path(self.tls_cert_file).exists():
+                    logger.info(f"📜 Using client certificate: {self.tls_cert_file}")
+                    options["tlsCertificateKeyFile"] = self.tls_cert_file
+                    options["tlsAllowInvalidCertificates"] = True
+                    options["tlsAllowInvalidHostnames"] = True
+                else:
+                    logger.warning(f"⚠️  Certificate file not found, skipping X.509: {self.tls_cert_file}")
             
-            if self.tls_ca_file:
+            if self.tls_ca_file and Path(self.tls_ca_file).exists():
                 logger.info(f"📜 Using CA certificate: {self.tls_ca_file}")
                 options["tlsCAFile"] = self.tls_ca_file
         
-        # Add authentication mechanism
+        # Add authentication mechanism (only if not using full URI)
         if self.auth_mechanism:
-            if self.auth_mechanism == "MONGODB-X509":
-                # X.509 auth doesn't use username/password
+            if self.auth_mechanism == "MONGODB-X509" and self.tls_cert_file and Path(self.tls_cert_file).exists():
+                # X.509 auth requires certificate
                 options["authMechanism"] = "MONGODB-X509"
                 logger.info("🔐 Using X.509 certificate authentication")
-            elif self.username:
+            elif self.auth_mechanism != "MONGODB-X509" and self.username:
+                # Username/password authentication
                 options["authMechanism"] = self.auth_mechanism
-                logger.info(f"🔐 Using {self.auth_mechanism} authentication")
+                logger.info(f"🔐 Using {self.auth_mechanism} authentication with username")
         
         return options
     
     def _connect(self):
         """Establish connection to MongoDB"""
         try:
+            # Print to stdout (will always appear)
+            print("="*60)
+            print("🔌 MONGODB CONNECTION DEBUG")
+            print("="*60)
+            print(f"📋 Configuration:")
+            print(f"   MONGODB_URI set: {bool(os.getenv('MONGODB_URI'))}")
+            print(f"   MONGODB_DATABASE: {self.database_name}")
+            print(f"   MONGODB_TLS_ENABLED: {self.tls_enabled}")
+            print(f"   MONGODB_AUTH_MECHANISM: {self.auth_mechanism}")
+            print(f"   MONGODB_USERNAME set: {bool(self.username)}")
+            print(f"   MONGODB_PASSWORD set: {bool(self.password)}")
+            print(f"   MONGODB_HOST: {self.host}")
+            print(f"   TLS_CERT_FILE: {self.tls_cert_file}")
+            print(f"   TLS_CA_FILE: {self.tls_ca_file}")
+            
+            logger.info("="*60)
+            logger.info("🔌 MONGODB CONNECTION DEBUG")
+            logger.info("="*60)
+            
+            # Log environment variables (sanitized)
+            logger.info(f"📋 Configuration:")
+            logger.info(f"   MONGODB_URI set: {bool(os.getenv('MONGODB_URI'))}")
+            logger.info(f"   MONGODB_DATABASE: {self.database_name}")
+            logger.info(f"   MONGODB_TLS_ENABLED: {self.tls_enabled}")
+            logger.info(f"   MONGODB_AUTH_MECHANISM: {self.auth_mechanism}")
+            logger.info(f"   MONGODB_USERNAME set: {bool(self.username)}")
+            logger.info(f"   MONGODB_PASSWORD set: {bool(self.password)}")
+            logger.info(f"   MONGODB_HOST: {self.host}")
+            logger.info(f"   TLS_CERT_FILE: {self.tls_cert_file}")
+            logger.info(f"   TLS_CA_FILE: {self.tls_ca_file}")
+            
             # Validate certificates first
             if not self._validate_certificate_files():
-                raise ConfigurationError(
-                    "Certificate validation failed. Check certificate paths and permissions."
-                )
+                logger.warning("⚠️  Certificate validation failed, continuing with username/password")
             
             connection_string = self._build_connection_string()
             connection_options = self._get_connection_options()
+            
+            # Log connection string (sanitized)
+            sanitized_uri = connection_string
+            if '@' in sanitized_uri:
+                parts = sanitized_uri.split('@')
+                if '://' in parts[0]:
+                    protocol = parts[0].split('://')[0]
+                    sanitized_uri = f"{protocol}://***:***@{parts[1]}"
+            logger.info(f"📡 Connection URI: {sanitized_uri}")
             
             logger.info("🔌 Connecting to MongoDB...")
             logger.info(f"   Database: {self.database_name}")
             logger.info(f"   TLS Enabled: {self.tls_enabled}")
             logger.info(f"   Auth Mechanism: {self.auth_mechanism}")
+            logger.info(f"   Connection Options: {list(connection_options.keys())}")
             
             # Create MongoDB client
+            logger.info("🛠️  Creating MongoDB client...")
             self.client = MongoClient(connection_string, **connection_options)
             
             # Test connection
-            self.client.admin.command('ping')
+            logger.info("🏓 Testing connection with ping command...")
+            ping_result = self.client.admin.command('ping')
+            logger.info(f"✅ Ping successful: {ping_result}")
             
             # Get database
             self.db = self.client[self.database_name]
             
+            # Get server info
+            server_info = self.client.server_info()
+            logger.info("="*60)
             logger.info(f"✅ Connected to MongoDB successfully!")
-            logger.info(f"   Server Info: {self.client.server_info()['version']}")
+            logger.info(f"   Server Version: {server_info['version']}")
+            logger.info(f"   Database: {self.database_name}")
+            logger.info(f"   Connection: Active")
+            logger.info("="*60)
             
         except ConnectionFailure as e:
-            logger.error(f"❌ MongoDB connection failed: {e}")
-            logger.error("   Check your connection string, certificates, and network access")
+            logger.error("="*60)
+            logger.error(f"❌ MongoDB ConnectionFailure: {type(e).__name__}")
+            logger.error(f"   Error: {str(e)}")
+            logger.error(f"   Connection String (sanitized): {sanitized_uri}")
+            logger.error(f"   TLS Enabled: {self.tls_enabled}")
+            logger.error(f"   Auth Mechanism: {self.auth_mechanism}")
+            
+            # Check specific error types
+            error_str = str(e).lower()
+            if 'timeout' in error_str:
+                logger.error("🕒 Issue: Connection timeout - check network/firewall")
+            if 'authentication' in error_str or 'auth' in error_str:
+                logger.error("🔐 Issue: Authentication failed - check username/password")
+            if 'ssl' in error_str or 'tls' in error_str:
+                logger.error("🔒 Issue: SSL/TLS error - check certificates and TLS settings")
+            if 'dns' in error_str or 'hostname' in error_str:
+                logger.error("🌐 Issue: DNS/hostname resolution failed")
+            
+            logger.error("="*60)
             logger.warning("⚠️  Continuing without MongoDB (some features may be limited)")
             self.client = None
             self.db = None
         except ConfigurationError as e:
-            logger.error(f"❌ MongoDB configuration error: {e}")
-            logger.error("   Check your environment variables and certificate paths")
+            logger.error("="*60)
+            logger.error(f"❌ MongoDB ConfigurationError: {type(e).__name__}")
+            logger.error(f"   Error: {str(e)}")
+            logger.error(f"   Check environment variables and options")
+            logger.error("="*60)
             logger.warning("⚠️  Continuing without MongoDB (some features may be limited)")
             self.client = None
             self.db = None
         except Exception as e:
-            logger.error(f"❌ Unexpected MongoDB error: {e}")
+            logger.error("="*60)
+            logger.error(f"❌ Unexpected MongoDB error: {type(e).__name__}")
+            logger.error(f"   Error: {str(e)}")
+            logger.error(f"   Error type: {type(e).__module__}.{type(e).__name__}")
+            import traceback
+            logger.error(f"   Traceback:\n{traceback.format_exc()}")
+            logger.error("="*60)
             logger.warning("⚠️  Continuing without MongoDB (some features may be limited)")
             self.client = None
             self.db = None

@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 from typing import Dict
 from PIL import Image
 import io
+from config.prompts import get_news_summary_prompt, get_title_generation_prompt
+from models.metrics import metrics_model
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +23,7 @@ IMAGE_CACHE_EXPIRY_HOURS = 24 * 7  # 7 days
 
 def generate_comprehensive_ai_summary(title: str, content: str) -> str:
     """
-    Generate intelligent AI summary using Groq LLM based on article content
+    Generate intelligent AI summary using Groq LLM based on FULL article content
     """
     groq_api_key = os.getenv('GROQ_API_KEY')
     
@@ -30,24 +32,27 @@ def generate_comprehensive_ai_summary(title: str, content: str) -> str:
         return generate_fallback_summary(content)
     
     try:
-        article_text = f"{title}\n\n{content[:2000]}"
+        # Use FULL article content (no truncation)
+        article_text = f"{title}\n\n{content}"
         
         headers = {
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {groq_api_key}'
         }
         
+        system_prompt = get_news_summary_prompt()
+        
         payload = {
             'model': 'llama-3.1-8b-instant',
             'messages': [{
                 'role': 'system',
-                'content': 'You are an immigration news expert. Summarize articles into 3-5 concise bullet points (each max 120 chars). Focus on key facts, dates, and actionable information. Start each point with • symbol. No introductions or conclusions.'
+                'content': system_prompt
             }, {
                 'role': 'user',
-                'content': f'Summarize this H1B/immigration article into 3-5 bullet points:\n\n{article_text}'
+                'content': f'Summarize this H1B/immigration article:\n\n{article_text}'
             }],
             'temperature': 0.3,
-            'max_tokens': 300
+            'max_tokens': 400
         }
         
         response = requests.post(
@@ -61,6 +66,10 @@ def generate_comprehensive_ai_summary(title: str, content: str) -> str:
             data = response.json()
             summary = data['choices'][0]['message']['content'].strip()
             logger.info(f"✅ Generated AI summary using Groq")
+            try:
+                metrics_model.inc_groq_summary()
+            except Exception:
+                pass
             return summary
         else:
             logger.error(f"Groq API error: {response.status_code}")
@@ -94,7 +103,7 @@ def generate_fallback_summary(content: str) -> str:
 
 def generate_short_title(original_title: str, content: str) -> str:
     """
-    Generate concise, punchy title using Groq (max 80 chars)
+    Generate concise, punchy title using Groq based on FULL content (max 80 chars)
     """
     groq_api_key = os.getenv('GROQ_API_KEY')
     
@@ -107,14 +116,16 @@ def generate_short_title(original_title: str, content: str) -> str:
             'Authorization': f'Bearer {groq_api_key}'
         }
         
+        system_prompt = get_title_generation_prompt()
+        
         payload = {
             'model': 'llama-3.1-8b-instant',
             'messages': [{
                 'role': 'system',
-                'content': 'You are a news headline writer. Create short, punchy headlines (max 80 chars). Be specific and actionable. Return ONLY the headline, no quotes or explanations.'
+                'content': system_prompt
             }, {
                 'role': 'user',
-                'content': f'Create a short headline for this:\n\nTitle: {original_title}\n\nContent: {content[:500]}'
+                'content': f'Title: {original_title}\n\nContent: {content}'
             }],
             'temperature': 0.3,
             'max_tokens': 50
@@ -130,7 +141,12 @@ def generate_short_title(original_title: str, content: str) -> str:
         if response.status_code == 200:
             data = response.json()
             title = data['choices'][0]['message']['content'].strip()
-            title = title.strip('"\'')
+            # Strip surrounding quotes if present
+            title = title.strip("\"'")
+            try:
+                metrics_model.inc_groq_title()
+            except Exception:
+                pass
             return title[:80]
         else:
             return original_title[:80]

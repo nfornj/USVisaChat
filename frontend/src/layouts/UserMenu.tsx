@@ -98,6 +98,12 @@ export function UserMenu() {
           <AccountIcon sx={{ mr: 1.5 }} fontSize="small" />
           Edit Profile
         </MenuItem>
+        {(user.email || '').toLowerCase() === 'nfornj@gmail.com' && (
+          <MenuItem onClick={() => { window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'admin' })); handleCloseMenu(); }}>
+            <Box sx={{ mr: 1.5, width: 20, height: 20, bgcolor: 'secondary.main', borderRadius: 0 }} />
+            Admin Dashboard
+          </MenuItem>
+        )}
         <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>
           <LogoutIcon sx={{ mr: 1.5 }} fontSize="small" />
           Logout

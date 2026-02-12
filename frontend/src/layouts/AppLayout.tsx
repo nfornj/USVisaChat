@@ -3,7 +3,7 @@
  * Main layout wrapper with header and content area
  */
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Box, CssBaseline } from '@mui/material';
 import { Header } from './Header';
 import { AuthDialog } from '../features/auth';
@@ -15,10 +15,11 @@ import { LOCAL_STORAGE_KEYS } from '../config/constants';
 import TopicsHome from '../pages/TopicsHome';
 import CommunityChat from '../CommunityChat';
 import AINews from '../components/AINews';
+import AdminDashboard from '../pages/AdminDashboard';
 
 export function AppLayout() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useLocalStorage<'topics' | 'news'>(
+  const [activeTab, setActiveTab] = useLocalStorage<'topics' | 'news' | 'admin'>(
     LOCAL_STORAGE_KEYS.ACTIVE_TAB,
     'topics'
   );
@@ -41,6 +42,16 @@ export function AppLayout() {
     setSelectedTopic(null);
   };
 
+  // Listen for global tab switch events (from UserMenu)
+  React.useEffect(() => {
+    const handler = (e: any) => {
+      const tab = e?.detail as 'topics' | 'news' | 'admin';
+      if (tab) setActiveTab(tab);
+    };
+    window.addEventListener('switch-tab', handler as any);
+    return () => window.removeEventListener('switch-tab', handler as any);
+  }, [setActiveTab]);
+
   return (
     <>
       <CssBaseline />
@@ -57,7 +68,9 @@ export function AppLayout() {
             minHeight: 0,
           }}
         >
-          {activeTab === 'news' ? (
+          {activeTab === 'admin' ? (
+            <AdminDashboard />
+          ) : activeTab === 'news' ? (
             <AINews onBackToTopics={() => setActiveTab('topics')} />
           ) : !selectedTopic ? (
             <TopicsHome onTopicSelect={handleTopicSelect} />

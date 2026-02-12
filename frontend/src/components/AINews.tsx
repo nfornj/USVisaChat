@@ -11,18 +11,18 @@ import {
   Alert,
   Grid,
   Container,
-  IconButton,
   Stack,
   Fade,
+  Switch,
+  FormControlLabel,
 } from "@mui/material";
 import {
-  OpenInNew as OpenInNewIcon,
-  Refresh as RefreshIcon,
   AutoAwesome as AutoAwesomeIcon,
   Schedule as ScheduleIcon,
   Article as ArticleIcon,
   ArrowBack as ArrowBackIcon,
 } from "@mui/icons-material";
+import TypewriterMarkdown from "./TypewriterMarkdown";
 
 
 interface NewsArticle {
@@ -33,6 +33,7 @@ interface NewsArticle {
   url: string;
   publishedAt: string;
   source: string;
+  sources?: { title?: string; url: string; site?: string }[];
   imageUrl?: string;
   aiSummary: string;
   tags: string[];
@@ -42,17 +43,28 @@ interface AINewsProps {
   onBackToTopics?: () => void;
 }
 
+
 export default function AINews({ onBackToTopics }: AINewsProps) {
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState<1 | 2>(1);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [hideYouTube, setHideYouTube] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("hideYouTubeEmbeds") === "1";
+    } catch {
+      return false;
+    }
+  });
 
   const fetchNews = async () => {
     setLoading(true);
+    setLoadingStep(1);
     setError(null);
 
     try {
+      // Step 1: Searching
       const response = await fetch("/api/ai-news", {
         method: "POST",
         headers: {
@@ -63,6 +75,9 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
           limit: 10,
         }),
       });
+
+      // Step 2: Processing (simulated - actual processing happens on backend)
+      setLoadingStep(2);
 
       if (!response.ok) {
         throw new Error("Failed to fetch news");
@@ -87,6 +102,12 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
     fetchNews();
   }, []);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem("hideYouTubeEmbeds", hideYouTube ? "1" : "0");
+    } catch {}
+  }, [hideYouTube]);
+
   const getTimeAgo = (dateString: string) => {
     const now = new Date();
     const articleDate = new Date(dateString);
@@ -102,7 +123,7 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
 
   return (
     <Box sx={{ bgcolor: "background.default", minHeight: "100vh", py: 4 }}>
-      <Container maxWidth="lg">
+      <Container maxWidth="lg" sx={{ pb: 6 }}>
         {/* Clean Header */}
         <Box sx={{ mb: 5 }}>
           {onBackToTopics && (
@@ -141,7 +162,7 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
               Latest H1B visa news powered by AI intelligence
             </Typography>
             <Stack
-              direction="row"
+              direction={{ xs: "column", sm: "row" }}
               spacing={1}
               justifyContent="center"
               alignItems="center"
@@ -155,30 +176,22 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
               {lastUpdated && (
                 <Chip
                   icon={<ScheduleIcon sx={{ fontSize: 14 }} />}
-                  label={`Updated ${getTimeAgo(lastUpdated.toISOString())}`}
+                  label={`Last updated ${getTimeAgo(lastUpdated.toISOString())}`}
                   size="small"
                   sx={{ bgcolor: "background.paper", fontWeight: 500 }}
                 />
               )}
-              <IconButton
-                onClick={fetchNews}
-                disabled={loading}
-                size="small"
-                sx={{
-                  bgcolor: "primary.main",
-                  color: "white",
-                  width: 32,
-                  height: 32,
-                  "&:hover": {
-                    bgcolor: "primary.dark",
-                  },
-                  "&:disabled": {
-                    bgcolor: "action.disabledBackground",
-                  },
-                }}
-              >
-                <RefreshIcon fontSize="small" />
-              </IconButton>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={hideYouTube}
+                    onChange={(e) => setHideYouTube(e.target.checked)}
+                    size="small"
+                  />
+                }
+                label={hideYouTube ? "YouTube: Hidden" : "YouTube: Show"}
+                sx={{ ml: { sm: 2 } }}
+              />
             </Stack>
           </Box>
 
@@ -189,7 +202,7 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
           )}
         </Box>
 
-        {/* Loading State */}
+        {/* Enhanced Loading State with Agent Workflow */}
         {loading && (
           <Box
             sx={{
@@ -199,10 +212,72 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
               py: 8,
             }}
           >
-            <CircularProgress size={50} thickness={4} />
-            <Typography variant="body1" color="text.secondary" sx={{ mt: 3 }}>
-              Fetching latest H1B news from Perplexity...
-            </Typography>
+            <CircularProgress size={60} thickness={4} />
+            
+            {/* Step Indicators */}
+            <Box sx={{ mt: 4, textAlign: "center" }}>
+              {/* Step 1: Searching */}
+              <Box sx={{ mb: 3 }}>
+                <Stack direction="row" spacing={1} alignItems="center" justifyContent="center">
+                  <Box
+                    sx={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: "50%",
+                      bgcolor: loadingStep >= 1 ? "primary.main" : "action.disabled",
+                      color: "white",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "0.875rem",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {loadingStep > 1 ? "✓" : "1"}
+                  </Box>
+                  <Typography
+                    variant="body1"
+                    sx={{
+                      color: loadingStep >= 1 ? "text.primary" : "text.disabled",
+                      fontWeight: loadingStep === 1 ? 600 : 400,
+                    }}
+                  >
+                    🔍 Searching for latest H1B news...
+                  </Typography>
+                </Stack>
+              </Box>
+
+              {/* Step 2: Analyzing */}
+              <Box>
+                <Stack direction="row" spacing={1} alignItems="center" justifyContent="center">
+                  <Box
+                    sx={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: "50%",
+                      bgcolor: loadingStep >= 2 ? "primary.main" : "action.disabled",
+                      color: "white",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "0.875rem",
+                      fontWeight: 600,
+                    }}
+                  >
+                    2
+                  </Box>
+                  <Typography
+                    variant="body1"
+                    sx={{
+                      color: loadingStep >= 2 ? "text.primary" : "text.disabled",
+                      fontWeight: loadingStep === 2 ? 600 : 400,
+                    }}
+                  >
+                    🤖 Analyzing articles and generating AI summaries...
+                  </Typography>
+                </Stack>
+              </Box>
+            </Box>
           </Box>
         )}
 
@@ -232,20 +307,75 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
                       },
                     }}
                   >
-                    {/* Hero Image */}
-                    {article.imageUrl && (
-                      <CardMedia
-                        component="img"
-                        image={article.imageUrl}
-                        alt={article.title}
-                        sx={{
-                          width: "100%",
-                          height: 220,
-                          objectFit: "cover",
-                          objectPosition: "center",
-                        }}
-                      />
-                    )}
+                    {/* Media: YouTube embed or image */}
+                    {(() => {
+                      // Avoid embedding YouTube: always skip
+                      const ytId = null;
+                      if (ytId) {
+                        if (hideYouTube) {
+                          const thumb = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+                          const watchUrl = `https://www.youtube.com/watch?v=${ytId}`;
+                          return (
+                            <Box sx={{ position: 'relative' }}>
+                              <CardMedia
+                                component="img"
+                                image={thumb}
+                                alt={article.title}
+                                sx={{ width: '100%', height: 220, objectFit: 'cover', objectPosition: 'center', filter: 'grayscale(10%)' }}
+                              />
+                              <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(0,0,0,0.35)' }}>
+                                <Button variant="contained" color="error" href={watchUrl} target="_blank" rel="noopener noreferrer">
+                                  Open on YouTube
+                                </Button>
+                              </Box>
+                            </Box>
+                          );
+                        }
+                        const embedUrl = `https://www.youtube-nocookie.com/embed/${ytId}?rel=0&modestbranding=1`;
+                        // Inline player with timeout-based fallback hint
+                        return (
+                          <Box sx={{ position: 'relative', width: '100%', paddingTop: '56.25%' }}>
+                            <iframe
+                              src={embedUrl}
+                              title={article.title}
+                              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0 }}
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                              sandbox="allow-scripts allow-same-origin allow-presentation"
+                              referrerPolicy="no-referrer"
+                              allowFullScreen
+                              onLoad={(e) => {
+                                const overlay = (e.currentTarget.parentElement?.querySelector('[data-yt-overlay]') as HTMLElement) || null;
+                                if (overlay) overlay.style.display = 'none';
+                              }}
+                            />
+                            <Box data-yt-overlay sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <CircularProgress size={28} />
+                            </Box>
+                            <Box data-yt-fallback sx={{ position: 'absolute', bottom: 8, right: 8, left: 8, display: 'flex', justifyContent: 'flex-end' }}>
+                              <Button size="small" href={`https://www.youtube.com/watch?v=${ytId}` } target="_blank" rel="noopener noreferrer" sx={{ bgcolor: 'background.paper' }}>
+                                Open on YouTube
+                              </Button>
+                            </Box>
+                          </Box>
+                        );
+                      }
+                      if (article.imageUrl) {
+                        return (
+                          <CardMedia
+                            component="img"
+                            image={article.imageUrl}
+                            alt={article.title}
+                            sx={{
+                              width: "100%",
+                              height: 220,
+                              objectFit: "cover",
+                              objectPosition: "center",
+                            }}
+                          />
+                        );
+                      }
+                      return null;
+                    })()}
 
                     {/* Content */}
                     <CardContent sx={{ p: 3, flexGrow: 1, display: "flex", flexDirection: "column" }}>
@@ -265,60 +395,57 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
                           {article.title}
                         </Typography>
 
-                        {/* Clean Summary */}
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{
-                            mb: 3,
-                            lineHeight: 1.7,
-                            fontSize: "0.95rem",
-                            whiteSpace: "pre-line",
-                          }}
-                        >
-                          {article.aiSummary}
+                        {/* Clean Summary (Markdown) */}
+                        <Box sx={{ mb: 2 }}>
+<TypewriterMarkdown content={article.aiSummary} cps={48} />
+                        </Box>
+
+                        {/* Sources list (inline links) */}
+                        <Typography variant="body2" sx={{ mb: 2 }} color="text.secondary">
+                          <strong style={{ color: 'inherit' }}>Sources:</strong>{' '}
+                          {(
+                            (article.sources && article.sources.length > 0
+                              ? article.sources
+                              : [{ url: article.url }]
+                            )
+                              .filter((s) => {
+                                try {
+                                  const host = new URL(s.url).hostname;
+                                  return !/youtube\.com|youtu\.be|youtube-nocookie\.com|player\.youtube\.com/i.test(host);
+                                } catch { return true; }
+                              })
+                          )
+                            .slice(0, 6)
+                            .map((s, i, arr) => {
+                              const host = (() => {
+                                try { return new URL(s.url).hostname.replace('www.', ''); } catch { return s.url; }
+                              })();
+                              return (
+                                <>
+                                  <a
+                                    key={s.url + i}
+                                    href={s.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ color: '#ef4444', textDecoration: 'underline', fontWeight: 700 }}
+                                  >
+                                    {host}
+                                  </a>
+                                  {i < arr.length - 1 ? ', ' : ''}
+                                </>
+                              );
+                            })}
                         </Typography>
 
                         {/* Spacer */}
                         <Box sx={{ flexGrow: 1 }} />
 
-                        {/* Bottom Section */}
-                        <Stack direction="row" spacing={1} alignItems="center" mb={2}>
-                          <Chip
-                            label={article.source}
-                            size="small"
-                            sx={{
-                              bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#f0f0f0',
-                              color: "text.secondary",
-                              fontWeight: 500,
-                              fontSize: "0.75rem",
-                            }}
-                          />
-                          <Typography variant="caption" color="text.secondary">
-                            • {getTimeAgo(article.publishedAt)}
-                          </Typography>
-                        </Stack>
+                        {/* Meta */}
+                        <Typography variant="caption" color="text.secondary" sx={{ mb: 1 }}>
+                          Updated {getTimeAgo(article.publishedAt)}
+                        </Typography>
 
-                        {/* Action button */}
-                        <Button
-                          variant="text"
-                          endIcon={<OpenInNewIcon fontSize="small" />}
-                          href={article.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          fullWidth
-                          sx={{
-                            textTransform: "none",
-                            fontWeight: 600,
-                            justifyContent: "space-between",
-                            color: "primary.main",
-                            "&:hover": {
-                              bgcolor: "rgba(25, 118, 210, 0.04)",
-                            },
-                          }}
-                        >
-                          Read More
-                        </Button>
+                        {/* Sources chips now replace the old Read More button */}
                       </CardContent>
                   </Card>
                 </Fade>
@@ -343,15 +470,8 @@ export default function AINews({ onBackToTopics }: AINewsProps) {
               No news articles available
             </Typography>
             <Typography variant="body2" color="text.secondary" mb={3}>
-              Click the refresh button to fetch the latest H1B visa news
+              News will be automatically refreshed every 24 hours
             </Typography>
-            <Button
-              variant="contained"
-              startIcon={<RefreshIcon />}
-              onClick={fetchNews}
-            >
-              Refresh News
-            </Button>
           </Box>
         )}
       </Container>

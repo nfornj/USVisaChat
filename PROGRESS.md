@@ -1,3 +1,10 @@
+# Progress Log
+
+- 2025-10-28: Enabled Fly.io persistent volume for chat images
+  - Added [[mounts]] to fly.toml: source=chat_data, destination=/app/data, uid=1000, gid=1000
+  - Ensured non-root runtime (appuser uid 1000) retains write access to mounted volume
+  - Chat images saved to /app/data/media/chat_images and served at /media
+
 # Visa Community Platform - Progress Tracker
 
 **Last Updated:** October 23, 2025  
@@ -472,6 +479,42 @@ If you have access to Zalando Sans font files:
 
 - Added comprehensive rules in `.cursorrules` to ensure `load_dotenv()` is ALWAYS added to entry points
 - Documented this issue as a lesson learned for future development
+
+---
+
+### November 9, 2025 - Exclude YouTube from AI News (Search + UI) ✅
+
+- Backend: Removed `youtube.com` from Perplexity domain filter and added a defensive filter to drop any results whose host matches youtube.com/youtu.be (including nocookie/player).
+- Frontend: Never embed YouTube in cards and hide YouTube links from the Sources list to prevent unplayable videos.
+- Outcome: News Center no longer shows YouTube videos; only article pages from non-YouTube sources are listed.
+
+Deploy:
+```bash
+# Frontend build
+cd frontend && npm run build
+
+# Restart dev services
+cd .. && docker compose --profile web up qdrant visa-web -d --force-recreate
+```
+
+---
+
+### November 7, 2025 - YouTube Embeds: Hide/Show Toggle + Fallback ✅
+
+- Added a user preference to hide all YouTube embeds in AI News cards (persists in localStorage)
+- When hidden, show a thumbnail with an "Open on YouTube" button instead of an iframe
+- When shown, use `youtube-nocookie.com` with sandbox/referrer policies, spinner overlay, and a quick "Open on YouTube" fallback link
+- This avoids ERR_BLOCKED_BY_CLIENT issues from privacy/ad-block extensions and prevents broken players from hurting UX
+
+Files Modified:
+- `frontend/src/components/AINews.tsx` — Added `hideYouTubeEmbeds` toggle (MUI Switch), thumbnail fallback, and open-on-YouTube link
+
+Deploy:
+```bash
+cd frontend && npm run build
+# then restart the web container (dev profile example)
+docker compose --profile web up visa-web -d --force-recreate
+```
 
 ---
 

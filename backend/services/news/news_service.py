@@ -8,12 +8,19 @@ import os
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from perplexity import Perplexity
+import concurrent.futures
+from urllib.parse import urlparse
+import re
 
 from .news_utils import (
     generate_comprehensive_ai_summary,
     generate_short_title,
     get_fallback_image
 )
+from .article_scraper import scrape_with_fallback
+from models.news import news_model
+from config.prompts import get_perplexity_news_query, get_perplexity_filters
+from models.metrics import metrics_model
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +39,7 @@ class NewsService:
         """Initialize Perplexity client with API key from environment"""
         self.api_key = os.getenv("PERPLEXITY_API_KEY")
         self.client = None
+        self.news_model = news_model
         
         if self.api_key:
             try:
@@ -43,29 +51,25 @@ class NewsService:
         else:
             logger.warning("⚠️  PERPLEXITY_API_KEY not found in environment")
         
-        # Cache structure
-        self.cache = {
-            "articles": [],
-            "last_updated": None,
-            "last_api_fetch": None,
-            "is_fetching": False
-        }
+        # In-memory cache for last API fetch time only
+        self.last_api_fetch = None
     
-    def fetch_news(self, query: Optional[str] = None, max_results: int = 15) -> Optional[List[Dict[str, Any]]]:
+    def fetch_news(self, query: Optional[str] = None, max_results: int = 15, force: bool = False) -> Optional[List[Dict[str, Any]]]:
         """
         Fetch H1B news from Perplexity Search API using official SDK
         
         Args:
             query: Custom search query (default: comprehensive H1B/immigration query)
             max_results: Maximum number of results to fetch (default: 15)
+            force: If True, bypasses the 24h fetch cooldown
         
         Returns:
             List of search results or None if fetch failed
         """
         try:
-            # Check rate limiting
-            if self.cache["last_api_fetch"]:
-                hours_since_fetch = (datetime.now() - self.cache["last_api_fetch"]).total_seconds() / 3600
+            # Check rate limiting (unless forced)
+            if self.last_api_fetch and not force:
+                hours_since_fetch = (datetime.now() - self.last_api_fetch).total_seconds() / 3600
                 if hours_since_fetch < self.MIN_FETCH_INTERVAL_HOURS:
                     logger.info(f"⏳ Perplexity API called {hours_since_fetch:.1f}h ago. Skipping (minimum {self.MIN_FETCH_INTERVAL_HOURS}h interval)")
                     return None
@@ -74,57 +78,173 @@ class NewsService:
                 logger.warning("Perplexity client not initialized")
                 return None
             
-            # Default comprehensive H1B/immigration query
+            # Get query from environment variable or use default
             if not query:
-                query = (
-                    "H1B visa breaking news updates green card processing EB-2 EB-3 "
-                    "priority dates PERM labor certification I-140 I-485 processing times "
-                    "USCIS policy changes premium processing delays RFE responses visa bulletin "
-                    "employment-based immigration OPT STEM extension cap gap H-4 EAD work authorization"
-                )
+                query = get_perplexity_news_query()
             
             logger.info(f"🔍 Fetching H1B news from Perplexity using SDK (query: {len(query)} chars)...")
             
-            # Use official SDK with search domains filter
-            search = self.client.search.create(
-                query=query,
-                max_results=max_results,
-                max_tokens_per_page=2048,
-                search_domain_filter=[
-                    "immihelp.com",
-                    "redbus2us.com",
-                    "newsweek.com",
-                    "uscis.gov",
-                    "cnn.com",
-                    "bbc.com"
-                ]
-            )
+            # Build advanced filters
+            filters = get_perplexity_filters()
+            # Only domain filter is supported reliably in the current Python SDK
+            create_kwargs = {
+                'query': query,
+                'max_results': max_results,
+                'max_tokens_per_page': 2048,
+            }
+            domains = filters.get('domains') or []
+            if domains:
+                # Ensure YouTube is NOT in the allowed set
+                domains = [d for d in domains if 'youtube' not in d]
+                create_kwargs['search_domain_filter'] = domains
+            logger.info(f"🔍 Perplexity filters: domains={len(domains)}")
+            
+            # Use official SDK with filters
+            search = self.client.search.create(**create_kwargs)
             
             # Track successful API call
-            self.cache["last_api_fetch"] = datetime.now()
+            self.last_api_fetch = datetime.now()
+            metrics_model.inc_perplexity()
             
             # Extract results from SDK response
             results = []
             if hasattr(search, 'results') and search.results:
-                for result in search.results:
-                    results.append({
+                # Debug: Log first result to see all available fields
+                if len(search.results) > 0:
+                    first_result = search.results[0]
+                    logger.info(f"🔍 DEBUG - Available fields in result: {dir(first_result)}")
+                    logger.info(f"🔍 DEBUG - Result dict: {first_result.__dict__ if hasattr(first_result, '__dict__') else 'No __dict__'}")
+                
+                for i, result in enumerate(search.results):
+                    result_data = {
                         'title': result.title if hasattr(result, 'title') else 'Untitled',
                         'content': result.content if hasattr(result, 'content') else result.snippet if hasattr(result, 'snippet') else '',
                         'url': result.url if hasattr(result, 'url') else '#',
                         'published_date': result.published_date if hasattr(result, 'published_date') else datetime.now().isoformat(),
                         'site': result.site if hasattr(result, 'site') else 'Immigration News'
-                    })
+                    }
+                    
+                    # Check for snapshot field
+                    if hasattr(result, 'snapshot'):
+                        result_data['snapshot'] = result.snapshot
+                        logger.info(f"📸 Found snapshot field in result {i}")
+                    
+                    results.append(result_data)
             
-            logger.info(f"✅ Successfully fetched {len(results)} news articles from Perplexity SDK")
+            # Filter out YouTube results defensively
+            def _is_youtube(u: str) -> bool:
+                try:
+                    host = urlparse(u).netloc.lower()
+                    return any(h in host for h in ('youtube.com', 'youtu.be', 'youtube-nocookie.com', 'player.youtube.com'))
+                except Exception:
+                    return False
+            results = [r for r in results if not _is_youtube(r.get('url', ''))]
+            
+            logger.info(f"✅ Successfully fetched {len(results)} non-YouTube news articles from Perplexity SDK")
             return results
             
         except Exception as e:
             logger.error(f"Error fetching news from Perplexity SDK: {e}")
             return None
     
+    def _parse_date_strict(self, date_str: Optional[str], url: str) -> Optional[datetime]:
+        """Return a publication datetime only if it is parseable and within the current year.
+        Falls back to parsing the URL for YYYY/MM/DD or YYYY-MM-DD. Returns None if not reliable.
+        """
+        def from_str(s: str) -> Optional[datetime]:
+            try:
+                return datetime.fromisoformat(s.replace('Z', '+00:00'))
+            except Exception:
+                return None
+        # Try provided field
+        if date_str:
+            dt = from_str(str(date_str))
+            if dt:
+                return dt
+        # Try URL patterns
+        m = re.search(r"/(20\d{2})/(\d{1,2})/(\d{1,2})", url)
+        if not m:
+            m = re.search(r"(20\d{2})-(\d{1,2})-(\d{1,2})", url)
+        if m:
+            y, mo, d = map(int, m.groups())
+            try:
+                return datetime(y, mo, d)
+            except Exception:
+                pass
+        return None
+
+    def _process_single_article(self, result: Dict[str, Any], index: int) -> Optional[Dict[str, Any]]:
+        """
+        Process a single article (used for parallel processing)
+        """
+        try:
+            original_title = result.get('title', f'H1B Visa News Update #{index+1}')
+            perplexity_content = result.get('content', result.get('snippet', ''))
+            snapshot = result.get('snapshot', '')  # Check for snapshot field
+            url = result.get('url', f'https://example.com/h1b-news/{index+1}')
+            raw_date = result.get('published_date') or result.get('date') or result.get('published') or ''
+            source = result.get('site', 'Immigration News')
+            # Domain for uniqueness
+            try:
+                site_domain = urlparse(url).netloc.replace("www.", "")
+            except Exception:
+                site_domain = source.lower().replace(" ", "-")
+            
+            # Strict publication date handling: require parseable date in current year
+            pub_dt = self._parse_date_strict(raw_date, url)
+            now = datetime.now()
+            if not pub_dt or pub_dt.year != now.year or (now - pub_dt).days > 30:
+                logger.info(f"⏭️  Skipping article {index} due to date filter (raw='{raw_date}' url='{url}')")
+                return None
+            published_at = pub_dt.isoformat()
+            
+            # Try to get full article content (Priority: Snapshot > Scrape > Perplexity snippet)
+            if snapshot and len(snapshot) > len(perplexity_content):
+                logger.info(f"📸 Using snapshot for article {index}: {len(snapshot)} chars")
+                full_content = snapshot
+            else:
+                logger.info(f"🌐 Scraping full article {index} from URL: {url}")
+                # Reduced timeout to 5s per article for faster processing
+                from .article_scraper import scrape_article_content
+                full_content = scrape_article_content(url, timeout=5)
+                if not full_content or len(full_content) < 100:
+                    logger.warning(f"⚠️  Scraping failed, using Perplexity content for article {index}")
+                    full_content = perplexity_content
+            
+            # Generate SHORT title using Groq (with full content)
+            short_title = generate_short_title(original_title, full_content)
+            
+            # Generate AI summary (with full content)
+            ai_summary = generate_comprehensive_ai_summary(original_title, full_content)
+            
+            # Generate image topic for better images
+            image_topic = f"{original_title} immigration visa"
+            
+            article = {
+                "id": f"article-{index}",
+                "title": short_title,
+                "originalTitle": original_title,
+                "summary": full_content[:300] + "..." if len(full_content) > 300 else full_content,
+                "content": full_content,  # Store full scraped content
+                "url": url,
+                "publishedAt": published_at,
+                "source": source,
+                "siteDomain": site_domain,
+                "topicKey": self._normalize_title(original_title),
+                "sources": [{"title": original_title, "url": url, "site": source}],
+                "imageUrl": get_fallback_image(image_topic, index),
+                "aiSummary": ai_summary,
+                "tags": ["H1B", "Visa", "Immigration", "Work Visa", "Tech Industry"]
+            }
+            return article
+            
+        except Exception as e:
+            logger.error(f"Error processing article {index}: {e}")
+            return None
+    
     def process_results(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Process Perplexity search results into article format with AI enhancements
+        Process Perplexity search results in PARALLEL for faster processing
         
         Args:
             results: Raw search results from Perplexity
@@ -136,43 +256,138 @@ class NewsService:
             return []
         
         articles = []
-        for i, result in enumerate(results[:12]):  # Limit to 12 articles
-            try:
-                original_title = result.get('title', f'H1B Visa News Update #{i+1}')
-                content = result.get('content', result.get('snippet', ''))
-                url = result.get('url', f'https://example.com/h1b-news/{i+1}')
-                published_at = result.get('published_date', datetime.now().isoformat())
-                source = result.get('site', 'Immigration News')
-                
-                # Generate SHORT title using Groq
-                short_title = generate_short_title(original_title, content)
-                
-                # Generate AI summary
-                ai_summary = generate_comprehensive_ai_summary(original_title, content)
-                
-                # Generate image topic for better images
-                image_topic = f"{original_title} immigration visa"
-                
-                article = {
-                    "id": f"article-{i}",
-                    "title": short_title,
-                    "summary": content[:300] + "..." if len(content) > 300 else content,
-                    "content": content,
-                    "url": url,
-                    "publishedAt": published_at,
-                    "source": source,
-                    "imageUrl": get_fallback_image(image_topic, i),
-                    "aiSummary": ai_summary,
-                    "tags": ["H1B", "Visa", "Immigration", "Work Visa", "Tech Industry"]
-                }
-                articles.append(article)
-                
-            except Exception as e:
-                logger.error(f"Error processing article {i}: {e}")
-                continue
+        results_to_process = results[:12]  # Limit to 12 articles
         
-        return articles
+        logger.info(f"🚀 Processing {len(results_to_process)} articles in parallel...")
+        
+        # Process articles in parallel using ThreadPoolExecutor (max 4 concurrent)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            future_to_index = {executor.submit(self._process_single_article, result, i): i 
+                             for i, result in enumerate(results_to_process)}
+            
+            for future in concurrent.futures.as_completed(future_to_index):
+                index = future_to_index[future]
+                try:
+                    article = future.result()
+                    if article:
+                        articles.append(article)
+                        logger.info(f"✅ Completed article {index + 1}/{len(results_to_process)}")
+                except Exception as e:
+                    logger.error(f"❌ Failed to process article {index}: {e}")
+        
+        # Sort articles by original index to maintain order
+        articles.sort(key=lambda x: int(x['id'].split('-')[1]))
+        
+        # De-duplicate by topic and merge sources
+        deduped = self._dedupe_and_merge_sources(articles)
+        curated = self._curate_top_articles(deduped)
+        logger.info(f"✅ Successfully curated {len(curated)} articles (from {len(articles)})")
+        return curated
     
+    def _normalize_title(self, title: str) -> str:
+        import re
+        t = (title or "").lower()
+        t = re.sub(r"[^a-z0-9\s]", " ", t)
+        t = re.sub(r"\s+", " ", t).strip()
+        # Keep first 12 words as signature
+        return " ".join(t.split()[:12])
+
+    def _dedupe_and_merge_sources(self, articles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Group similar articles by normalized title and merge their sources."""
+        if not articles:
+            return []
+        groups: Dict[str, Dict[str, Any]] = {}
+        for a in articles:
+            key = a.get("topicKey") or self._normalize_title(a.get("originalTitle") or a.get("title"))
+            if key in groups:
+                # Append as additional source if url not already present
+                existing = groups[key]
+                urls = {s.get("url") for s in existing.get("sources", [])}
+                if a.get("url") not in urls:
+                    existing.setdefault("sources", []).append({
+                        "title": a.get("originalTitle") or a.get("title"),
+                        "url": a.get("url"),
+                        "site": a.get("source")
+                    })
+                # Keep newest publishedAt and image
+                if a.get("publishedAt", "") > existing.get("publishedAt", ""):
+                    existing["publishedAt"] = a.get("publishedAt")
+                if not existing.get("imageUrl") and a.get("imageUrl"):
+                    existing["imageUrl"] = a.get("imageUrl")
+                # Prefer explicit siteDomain
+                if not existing.get("siteDomain") and a.get("siteDomain"):
+                    existing["siteDomain"] = a.get("siteDomain")
+            else:
+                groups[key] = a
+                groups[key].setdefault("sources", a.get("sources", []))
+                groups[key]["topicKey"] = key
+        # Return in sorted order by publishedAt desc
+        unique_articles = list(groups.values())
+        unique_articles.sort(key=lambda x: x.get("publishedAt", ""), reverse=True)
+        return unique_articles
+
+    def _curate_top_articles(self, articles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Apply curation rules:
+        - Only last 30 days
+        - Prefer unique siteDomain and topicKey
+        - Exactly up to 10 for display
+        - Breaking news (<24h) pinned to top
+        """
+        if not articles:
+            return []
+        now = datetime.now()
+        thirty_days_ago = now - timedelta(days=30)
+        # Filter by date and current year
+        def parse_dt(s: str):
+            try:
+                return datetime.fromisoformat(str(s).replace('Z', '+00:00'))
+            except Exception:
+                return None
+        # Keep only items with a parseable date within 30 days AND current year
+        recent = []
+        for a in articles:
+            dt = parse_dt(a.get("publishedAt"))
+            if dt and dt >= thirty_days_ago and dt.year == now.year:
+                recent.append(a)
+        # Sort by recency
+        recent.sort(key=lambda x: x.get("publishedAt", ""), reverse=True)
+        selected: List[Dict[str, Any]] = []
+        seen_sites = set()
+        seen_topics = set()
+        # First, collect breaking news <24h regardless of repeat topic
+        for a in recent:
+            if len(selected) >= 10:
+                break
+            dt = parse_dt(a.get("publishedAt"))
+            if not dt:
+                continue
+            age_hours = (now - dt).total_seconds() / 3600
+            if age_hours <= 24 and a.get("siteDomain") not in seen_sites:
+                selected.append(a)
+                seen_sites.add(a.get("siteDomain"))
+                seen_topics.add(a.get("topicKey"))
+        # Then, fill with unique site + topic
+        for a in recent:
+            if len(selected) >= 10:
+                break
+            site = a.get("siteDomain")
+            topic = a.get("topicKey")
+            if site in seen_sites or topic in seen_topics:
+                continue
+            selected.append(a)
+            seen_sites.add(site)
+            seen_topics.add(topic)
+        # If still less than 10, relax topic uniqueness but keep site uniqueness
+        for a in recent:
+            if len(selected) >= 10:
+                break
+            site = a.get("siteDomain")
+            if site in seen_sites:
+                continue
+            selected.append(a)
+            seen_sites.add(site)
+        return selected
+
     def merge_articles_intelligently(
         self, 
         new_articles: List[Dict[str, Any]], 
@@ -207,85 +422,76 @@ class NewsService:
     
     def get_cached_articles(self, limit: int = 10) -> Dict[str, Any]:
         """
-        Get cached articles with metadata
+        Get articles from MongoDB
         
         Args:
             limit: Maximum number of articles to return
         
         Returns:
-            Dictionary with articles and cache metadata
+            Dictionary with articles and metadata
         """
+        articles = self.news_model.get_articles(limit=limit)
+        latest_date = self.news_model.get_latest_article_date()
+        
         cache_age_hours = 0
-        if self.cache["last_updated"]:
+        if latest_date:
             cache_age_hours = round(
-                (datetime.now() - self.cache["last_updated"]).total_seconds() / 3600, 
+                (datetime.now() - latest_date).total_seconds() / 3600, 
                 1
             )
         
         return {
-            "articles": self.cache["articles"][:limit],
-            "total": len(self.cache["articles"][:limit]),
-            "timestamp": self.cache["last_updated"].isoformat() if self.cache["last_updated"] else datetime.now().isoformat(),
-            "source": "cache",
+            "articles": articles,
+            "total": len(articles),
+            "timestamp": latest_date.isoformat() if latest_date else datetime.now().isoformat(),
+            "source": "mongodb",
             "cache_age_hours": cache_age_hours,
-            "has_articles": len(self.cache["articles"]) > 0
+            "has_articles": len(articles) > 0
         }
     
     def is_cache_expired(self) -> bool:
-        """Check if cache is expired"""
-        if not self.cache["last_updated"]:
+        """Check if cache is expired based on the latest article timestamp in MongoDB"""
+        latest_date = self.news_model.get_latest_article_date()
+        if not latest_date:
             return True
-        
-        cache_age_hours = (datetime.now() - self.cache["last_updated"]).total_seconds() / 3600
+        cache_age_hours = (datetime.now() - latest_date).total_seconds() / 3600
         return cache_age_hours > self.CACHE_EXPIRY_HOURS
     
     def refresh_cache(self, force: bool = False) -> Dict[str, Any]:
         """
-        Refresh news cache from Perplexity
+        Refresh news from Perplexity and save to MongoDB
         
         Args:
-            force: Force refresh even if cache is not expired
+            force: Force refresh even if recently fetched
         
         Returns:
             Result dictionary with status and message
         """
-        if self.cache["is_fetching"]:
-            return {"success": False, "message": "News fetch already in progress", "status": "fetching"}
-        
-        if not force and not self.is_cache_expired():
-            return {"success": False, "message": "Cache is still fresh", "status": "cached"}
-        
-        self.cache["is_fetching"] = True
         logger.info("🔄 Refreshing news cache...")
         
         try:
             # Fetch from Perplexity using SDK
-            results = self.fetch_news()
+            results = self.fetch_news(force=force)
             
             if results:
                 new_articles = self.process_results(results)
                 if new_articles:
-                    # Merge with existing cache
-                    merged_articles = self.merge_articles_intelligently(
-                        new_articles,
-                        self.cache["articles"]
-                    )
-                    self.cache["articles"] = merged_articles
-                    self.cache["last_updated"] = datetime.now()
+                    # Save to MongoDB
+                    save_result = self.news_model.save_articles(new_articles)
                     
-                    new_count = len([
-                        a for a in new_articles 
-                        if a.get('url', '') not in {e.get('url', '') for e in self.cache["articles"]}
-                    ])
-                    
-                    logger.info(f"✅ Updated cache with {len(merged_articles)} total articles ({new_count} new)")
-                    
-                    return {
-                        "success": True,
-                        "message": f"Successfully refreshed cache with {len(merged_articles)} total articles ({new_count} new)",
-                        "status": "success",
-                        "article_count": len(merged_articles)
-                    }
+                    if save_result.get("success"):
+                        logger.info(f"✅ Saved {save_result['saved']} new articles to MongoDB")
+                        
+                        return {
+                            "success": True,
+                            "message": f"Successfully saved {save_result['saved']} new articles",
+                            "status": "success",
+                            "saved": save_result['saved'],
+                            "updated": save_result['updated'],
+                            "total_in_db": self.news_model.get_article_count()
+                        }
+                    else:
+                        return {"success": False, "message": "Failed to save to MongoDB", "status": "failed"}
                 else:
                     logger.warning("No articles processed from Perplexity data")
                     return {"success": False, "message": "No articles processed", "status": "failed"}
@@ -296,24 +502,25 @@ class NewsService:
         except Exception as e:
             logger.error(f"Error refreshing cache: {e}")
             return {"success": False, "message": f"Error: {str(e)}", "status": "error"}
-        finally:
-            self.cache["is_fetching"] = False
     
     def get_cache_status(self) -> Dict[str, Any]:
-        """Get current cache status"""
+        """Get current MongoDB cache status"""
+        article_count = self.news_model.get_article_count()
+        latest_date = self.news_model.get_latest_article_date()
+        
         cache_age_hours = 0
-        if self.cache["last_updated"]:
+        if latest_date:
             cache_age_hours = round(
-                (datetime.now() - self.cache["last_updated"]).total_seconds() / 3600,
+                (datetime.now() - latest_date).total_seconds() / 3600,
                 1
             )
         
         return {
-            "has_articles": len(self.cache["articles"]) > 0,
-            "article_count": len(self.cache["articles"]),
-            "last_updated": self.cache["last_updated"].isoformat() if self.cache["last_updated"] else None,
+            "has_articles": article_count > 0,
+            "article_count": article_count,
+            "last_updated": latest_date.isoformat() if latest_date else None,
             "cache_age_hours": cache_age_hours,
-            "is_fetching": self.cache["is_fetching"],
-            "is_expired": cache_age_hours > self.CACHE_EXPIRY_HOURS if self.cache["last_updated"] else True,
-            "perplexity_available": self.client is not None
+            "is_expired": cache_age_hours > self.CACHE_EXPIRY_HOURS if latest_date else True,
+            "perplexity_available": self.client is not None,
+            "storage": "mongodb"
         }

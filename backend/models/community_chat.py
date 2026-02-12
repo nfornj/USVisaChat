@@ -156,6 +156,11 @@ class ConnectionManager:
         if room_id in self.rooms and user_email in self.rooms[room_id]:
             display_name = self.rooms[room_id][user_email]['display_name']
             del self.rooms[room_id][user_email]
+            # Persist presence to DB
+            try:
+                self.db.db.update_presence(room_id, user_email, display_name, online=False) if hasattr(self.db, 'db') and hasattr(self.db.db, 'update_presence') else self.db.update_presence(room_id, user_email, display_name, online=False)
+            except Exception:
+                pass
             # Clean up empty rooms
             if not self.rooms[room_id]:
                 del self.rooms[room_id]
@@ -343,6 +348,48 @@ class ConnectionManager:
         await self.broadcast(msg_data, room_id=room_id)
         
         return saved_msg
+
+
+    def get_room_statistics(self) -> List[Dict]:
+        """Get statistics for all rooms including online users and message counts"""
+        room_stats = []
+        
+        # Get message counts from database
+        if self.db.db:  # Check if MongoDB is available
+            db_room_stats = self.db.db.get_room_stats()
+            db_stats_map = {stat['room_id']: stat for stat in db_room_stats}
+        else:
+            db_stats_map = {}
+        
+        # Combine with online user counts (use presence collection if available)
+        presence_counts = {}
+        try:
+            if self.db.db and hasattr(self.db.db, 'get_presence_counts_map'):
+                presence_counts = self.db.db.get_presence_counts_map()
+            else:
+                # Wrapper exposes same method for convenience
+                presence_counts = getattr(self.db, 'get_presence_counts_map', lambda: {})()
+        except Exception:
+            presence_counts = {}
+        
+        all_room_ids = set(self.rooms.keys()) | set(db_stats_map.keys()) | set(presence_counts.keys())
+        
+        for room_id in all_room_ids:
+            online_users = presence_counts.get(room_id)
+            if online_users is None:
+                online_users = len(self.rooms.get(room_id, {}))
+            db_stat = db_stats_map.get(room_id, {})
+            
+            room_stats.append({
+                'room_id': room_id,
+                'online_users': online_users,
+                'message_count': db_stat.get('message_count', 0),
+                'unique_users': db_stat.get('user_count', 0),
+                'oldest_message': db_stat.get('oldest_message'),
+                'newest_message': db_stat.get('newest_message')
+            })
+        
+        return room_stats
 
 
 # Global connection manager
